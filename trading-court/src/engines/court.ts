@@ -38,7 +38,7 @@ import { analyzeMTF, mtfScore } from "./mtf.js";
 import { analyzeCorrelation, correlationScore } from "./correlation.js";
 import { analyzeNews, newsScore } from "./newsEngine.js";
 import { analyzePriceAction, priceActionScore } from "./priceAction.js";
-import { classifySession, applySession } from "./session.js";
+import { classifySession } from "./session.js";
 import { buildPlan, classifyConfidence } from "./tradePlan.js";
 import { evaluateRisk } from "./risk.js";
 import { momentumScore } from "./momentum.js";
@@ -143,7 +143,16 @@ function composeScores(
   const cal = applyCalibration(symbol, compositeRaw, heuristicConf);
   const confidenceRaw = cal.confidence;
 
-  const [composite, confidence] = applySession(compositeRaw, confidenceRaw, sessionWeight);
+  // v4.6.18 — session liquidity weight scales the SIGNAL (composite), never an
+  // empirical win-rate. Multiplying a calibrated confidence (= measured win-rate
+  // from the bin) by a liquidity factor like 1.15 would claim a win-rate the
+  // data never observed and corrupt the v3.9 calibration. So: scale composite by
+  // session always; scale confidence only on the heuristic path (where it is
+  // just |composite| and session-modulation is itself heuristic).
+  const composite = clamp(compositeRaw * sessionWeight, -100, 100);
+  const confidence = cal.source === "calibrated"
+    ? clamp(confidenceRaw, 0, 100)
+    : clamp(confidenceRaw * sessionWeight, 0, 100);
 
   const [direction, tier, sizeMult] = deriveDecision(composite, confidence);
 
