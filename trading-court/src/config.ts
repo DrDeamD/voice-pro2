@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.15-livesquawk-fix";
+export const VERSION = "4.6.16-livesquawk-timestamp";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

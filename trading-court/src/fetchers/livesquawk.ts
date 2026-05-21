@@ -92,10 +92,20 @@ function parseLiveSquawkLatest(html: string): Array<{ title: string; link: strin
   while ((m = titleRe.exec(html)) !== null && out.length < 30) {
     const title = decodeHtml(m[1]);
     if (!title || title.length < 6) continue;
-    const after = html.slice(m.index, m.index + 1500);
+    const after = html.slice(m.index, m.index + 2200);
     const bodyM = after.match(/<div\s+class=['"]latest_news__each__body['"]>([\s\S]*?)<\/div>/i);
     const desc = bodyM ? decodeHtml(bodyM[1]) : "";
-    out.push({ title, link: "", desc, pub: null });
+    // v4.6.16 — real timestamp lives in the sibling node:
+    //   <div class='latest_news_each_time' data-item-time='1779350476'>
+    // Unix epoch SECONDS. Without it items got freshness=null → sorted last →
+    // sliced out before display (the "always InvestingLive" bug).
+    const timeM = after.match(/data-item-time=['"](\d{9,13})['"]/i);
+    let pub: Date | null = null;
+    if (timeM) {
+      const epoch = parseInt(timeM[1], 10);
+      pub = new Date(epoch < 1e12 ? epoch * 1000 : epoch);
+    }
+    out.push({ title, link: "", desc, pub });
   }
   return out;
 }
