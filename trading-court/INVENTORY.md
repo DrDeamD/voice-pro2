@@ -166,7 +166,8 @@ After v4.3 rebrand:
    bars apart, note) in detail pane after ORB. Hidden when no signals.
 9. ✅ **Manipulation events** (v4.6.10) — primary sweep/Judas signal (kind, strength,
    swept level, note) in detail pane after Divergence. Hidden when kind=NONE.
-10. **KillZone label** in detail header.
+10. ✅ **KillZone card** (v4.6.11) — session-quality context (zone, 3-star quality,
+    weight, veto, reasoning) in detail pane after Manipulation.
 11. **EOD gate notice** when "trade won't close same session".
 12. **Calendar feedback signals** (which past actuals are still moving the bias).
 13. **Market structure detail** (dealing range, premium %, last BOS/CHoCH age).

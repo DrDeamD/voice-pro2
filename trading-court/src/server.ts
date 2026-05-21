@@ -1179,6 +1179,23 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }
 
+    // ── v4.6.11 P2 #10 — KillZone session context (time-based, global) ─────
+    var kz = p.killZone;
+    var kzHtml = '';
+    if (kz && kz.killZone) {
+      var kzMap = { ASIA_KZ: 'نطاق آسيا', LONDON_KZ: 'نطاق لندن', NY_AM_KZ: 'نطاق نيويورك (صباح)', LONDON_CLOSE_KZ: 'إغلاق لندن', NONE: 'خارج النطاقات النشطة' };
+      var kzLabel = kzMap[kz.killZone] || kz.killZone;
+      var kzCol = kz.vetoed ? '#f59e0b' : (kz.killZone !== 'NONE' ? '#10b981' : '#64748b');
+      var q = Math.round(kz.quality || 0);
+      var stars = '';
+      for (var qi = 0; qi < 3; qi++) stars += (qi < q) ? '★' : '☆';
+      kzHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid ' + kzCol + '40;margin-bottom:12px">'
+        + '<div class="sub-hdr" style="color:' + kzCol + '">⏱️ نطاق الجلسة: ' + esc(kzLabel) + ' ' + stars + (kz.vetoed ? ' · موقوف' : '') + '</div>'
+        + '<div class="kv"><span class="kv-key">الوزن</span><span class="kv-val">×' + (kz.weight != null ? kz.weight.toFixed(2) : '—') + '</span></div>'
+        + '<p style="font-size:11px;color:#94a3b8;line-height:1.5">' + esc(kz.reasoning || '') + '</p>'
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1243,6 +1260,7 @@ const INLINE_JS = `// ==========================================================
         orbHtml +
         divHtml +
         manipHtml +
+        kzHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
