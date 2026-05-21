@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.12-eod-gate-card";
+export const VERSION = "4.6.13-cal-feedback-card";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

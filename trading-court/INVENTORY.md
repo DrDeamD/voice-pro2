@@ -170,7 +170,9 @@ After v4.3 rebrand:
     weight, veto, reasoning) in detail pane after Manipulation.
 11. ✅ **EOD gate notice** (v4.6.12) — shows day-trading gate veto/warning + hours
     to NY close in detail pane after KillZone. Hidden when neither vetoed nor warning.
-12. **Calendar feedback signals** (which past actuals are still moving the bias).
+12. ✅ **Calendar feedback** (v4.6.13) — past economic surprises still moving the
+    bias (currency, direction, magnitude, minutes ago, decay%) filtered to pair
+    currencies, in detail pane after EOD gate.
 13. **Market structure detail** (dealing range, premium %, last BOS/CHoCH age).
 
 ### P3 (newsEngine internals — needs verification)

@@ -1209,6 +1209,32 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }
 
+    // ── v4.6.13 P2 #12 — Calendar feedback (past surprises still moving bias) ─
+    var cf = p.calendarFeedback;
+    var cfHtml = '';
+    if (cf && cf.signals && cf.signals.length > 0) {
+      var cfCcys = {};
+      cfCcys[(p.symbol || '').slice(0,3)] = true;
+      cfCcys[(p.symbol || '').slice(3,6)] = true;
+      if ((p.symbol || '').indexOf('XAU') === 0) cfCcys['USD'] = true;
+      var rele = cf.signals.filter(function(s){ return cfCcys[s.currency]; });
+      if (rele.length === 0) rele = cf.signals.slice(0, 4);
+      var cfRows = rele.slice(0, 6).map(function(s){
+        var col = s.direction === 'BULLISH' ? '#10b981' : (s.direction === 'BEARISH' ? '#ef4444' : '#94a3b8');
+        return '<div style="padding:4px 0;border-bottom:1px solid rgba(71,85,105,0.15)">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px">'
+            + '<span style="font-size:11px;color:#cbd5e1">' + esc(s.currency) + ' · ' + esc(s.eventTitle) + '</span>'
+            + '<span style="font-size:10px;color:' + col + ';font-weight:600;font-family:monospace;white-space:nowrap">' + esc(s.direction) + ' ' + Math.round(s.magnitude || 0) + '</span>'
+          + '</div>'
+          + '<span style="font-size:9.5px;color:#64748b">' + (s.minutesAgo || 0) + 'د مضت · تلاشٍ ' + Math.round((s.decayFactor || 0) * 100) + '%</span>'
+          + '</div>';
+      }).join('');
+      cfHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e2d3d;margin-bottom:12px">'
+        + '<div class="sub-hdr">📅 أثر بيانات سابقة (لا يزال يحرّك الانحياز)</div>'
+        + cfRows
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1275,6 +1301,7 @@ const INLINE_JS = `// ==========================================================
         manipHtml +
         kzHtml +
         eodHtml +
+        cfHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
