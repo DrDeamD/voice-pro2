@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.16-livesquawk-timestamp";
+export const VERSION = "4.6.17-math-audit-fixes";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {
@@ -286,8 +286,12 @@ export const DYNAMIC_WEIGHTS = {
   },
   // NEW v3.3: Breaking news (intervention/policy shock) — even more aggressive
   // News dominates because structure becomes meaningless during a 200-pip squeeze
+  // v4.6.17 — news 0.25→0.30 so the merged map sums to 1.00. The previous set
+  // summed to 0.95 (carried-over priceAction 0.09 + regime 0.07 + correlation
+  // 0.07 were not rescaled), silently shrinking composite magnitude ~5% in
+  // breaking mode — exactly when news should dominate.
   breakingNews: {
-    news:            0.25,
+    news:            0.30,
     marketStructure: 0.12,
     mtf:             0.13,
     momentum:        0.10,

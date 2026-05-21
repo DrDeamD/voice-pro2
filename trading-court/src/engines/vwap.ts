@@ -151,8 +151,11 @@ export function computeVwap(m5: Candle[], currentPrice: number): VwapReport {
     const posD = classifyPosition(currentPrice, daily.vwap);
     const distPct = ((currentPrice - daily.vwap) / daily.vwap) * 100;
 
-    // Distance contribution: further above/below = stronger signal (max ±40)
-    const distScore = Math.max(-40, Math.min(40, distPct * 8000));
+    // Distance contribution: further above/below = stronger signal (max ±40).
+    // v4.6.17 — was ×8000 which saturated at ±40 for any move >0.005%, turning
+    // a "distance gradient" into a pure sign flag. ×80 gives ±40 at ~0.5%
+    // distance and a smooth gradient below that.
+    const distScore = Math.max(-40, Math.min(40, distPct * 80));
     score += distScore;
 
     if (posD === "ABOVE") {
@@ -169,8 +172,11 @@ export function computeVwap(m5: Candle[], currentPrice: number): VwapReport {
       parts.push(`Price AT daily VWAP ${daily.vwap.toFixed(5)} — equilibrium / decision point`);
     }
 
-    // Session VWAP alignment bonus
-    if (session && session !== daily) {
+    // Session VWAP alignment bonus. v4.6.17 — compare START TIMESTAMPS, not
+    // object identity (session/daily are always distinct objects, so the old
+    // `session !== daily` was always true and double-counted the daily signal
+    // during the Asia session when sessionStartTs === dayStartTs).
+    if (session && sessionStartTs !== dayStartTs) {
       const posS = classifyPosition(currentPrice, session.vwap);
       if (posD === posS && posD !== "AT") {
         // Both VWAPs agree — stronger conviction

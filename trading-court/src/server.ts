@@ -103,10 +103,13 @@ async function getSnapshot(force = false): Promise<Snapshot & { breakingNews?: N
     const sr = p?.speechReport;
     if (!sr?.recent) continue;
     for (const s of sr.recent) {
-      const key = String(s.title ?? "").slice(0, 80).toLowerCase();
-      if (!key || seenStanceSpeech.has(key)) continue;
-      seenStanceSpeech.add(key);
       const ccy = s.primaryCurrency || "USD";
+      // v4.6.17 — dedup key includes currency so two different central banks
+      // sharing a generic/identical title (e.g. "Monetary Policy Statement")
+      // are NOT collapsed into one. Was title-only → cross-currency drops.
+      const key = ccy + "|" + String(s.title ?? "").slice(0, 80).toLowerCase();
+      if (!s.title || seenStanceSpeech.has(key)) continue;
+      seenStanceSpeech.add(key);
       if (!stanceByCcy[ccy]) stanceByCcy[ccy] = { currency: ccy, stanceScore: 0, speechCount: 0 };
       stanceByCcy[ccy].stanceScore += s.hawkDove?.effectiveImpact ?? 0;
       stanceByCcy[ccy].speechCount += 1;

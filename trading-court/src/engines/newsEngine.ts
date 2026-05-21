@@ -43,8 +43,10 @@ function freshnessWeight(hours: number | null): number {
   const min = hours * 60;
   const halfLife = 90;
   const decayed = Math.pow(0.5, min / halfLife);
-  // Velocity boost for items ≤ 15min
-  const boost = min <= 15 ? 1.4 : 1.0;
+  // v4.6.17 — velocity boost ramps SMOOTHLY from 1.4 at t=0 to 1.0 at t=15min.
+  // Was a discontinuous step (1.4 for ≤15min, else 1.0) which made a 16-min-old
+  // item weigh ~29% LESS than a 15-min one — a non-monotonic freshness cliff.
+  const boost = 1 + 0.4 * Math.max(0, (15 - min) / 15);
   return Math.max(0.05, decayed * boost);
 }
 
