@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.13-cal-feedback-card";
+export const VERSION = "4.6.14-mktstruct-card";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

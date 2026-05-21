@@ -161,7 +161,7 @@ After v4.3 rebrand:
 7. ✅ **Calibration provenance** (v4.6.8) — line under detail-header headline shows
    empirical (bin range · sample size · win-rate) vs heuristic (with reason).
 
-### P2 (engine outputs not surfaced)
+### P2 (engine outputs not surfaced) — ✅ ALL RESOLVED v4.6.9–v4.6.14
 8. ✅ **Divergence card** (v4.6.9) — H1 + M15 RSI divergence signals (kind, strength,
    bars apart, note) in detail pane after ORB. Hidden when no signals.
 9. ✅ **Manipulation events** (v4.6.10) — primary sweep/Judas signal (kind, strength,
@@ -173,7 +173,8 @@ After v4.3 rebrand:
 12. ✅ **Calendar feedback** (v4.6.13) — past economic surprises still moving the
     bias (currency, direction, magnitude, minutes ago, decay%) filtered to pair
     currencies, in detail pane after EOD gate.
-13. **Market structure detail** (dealing range, premium %, last BOS/CHoCH age).
+13. ✅ **Market structure detail** (v4.6.14) — Premium/Discount zone + %, H4 range,
+    ICT dealing range + position%, last BOS/CHoCH with fresh/stale, in detail pane.
 
 ### P3 (newsEngine internals — needs verification)
 14. **News duplicate suppression** — confirm dedup logic before claiming complete.

@@ -1235,6 +1235,39 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }
 
+    // ── v4.6.14 P2 #13 — Market structure detail ──────────────────────────
+    var ms = p.marketStructure;
+    var msHtml = '';
+    if (ms && (ms.dealingRange || (ms.premiumDiscount && ms.premiumDiscount.zone))) {
+      var pd = ms.premiumDiscount || {};
+      var dr = ms.dealingRange;
+      var zoneMap = { PREMIUM: 'Premium (مرتفع)', DISCOUNT: 'Discount (منخفض)', EQUILIBRIUM: 'توازن', UNKNOWN: 'غير محدد' };
+      var zoneCol = pd.zone === 'PREMIUM' ? '#ef4444' : pd.zone === 'DISCOUNT' ? '#10b981' : '#94a3b8';
+      var pdPct = (pd.positionPct != null) ? Math.round(pd.positionPct * 100) : null;
+      function bosLabel(k) { return (k || '').replace('BOS_', 'BOS ').replace('CHOCH_', 'CHoCH ').replace('_', ' '); }
+      var msRows = '<div class="kv"><span class="kv-key">المنطقة (Premium/Discount)</span><span class="kv-val" style="color:' + zoneCol + '">' + esc(zoneMap[pd.zone] || pd.zone || '—') + (pdPct != null ? ' · ' + pdPct + '%' : '') + '</span></div>';
+      if (pd.rangeHigh != null && pd.rangeLow != null) {
+        msRows += '<div class="kv"><span class="kv-key">نطاق H4 (High/Low)</span><span class="kv-val">' + fmt(pd.rangeHigh, d) + ' / ' + fmt(pd.rangeLow, d) + '</span></div>';
+      }
+      if (dr) {
+        var drPct = (dr.positionPctScaled != null) ? Math.round(dr.positionPctScaled) : Math.round((dr.positionPct || 0) * 100);
+        msRows += '<div class="kv"><span class="kv-key">Dealing Range (ICT)</span><span class="kv-val">' + fmt(dr.high, d) + ' / ' + fmt(dr.low, d) + ' · ' + drPct + '%</span></div>';
+      }
+      if (ms.lastBosKind) {
+        var bc = (ms.lastBosKind.indexOf('BULL') >= 0) ? '#10b981' : '#ef4444';
+        msRows += '<div class="kv"><span class="kv-key">آخر BOS</span><span class="kv-val" style="color:' + bc + '">' + esc(bosLabel(ms.lastBosKind)) + (ms.lastBosFresh ? ' · جديد' : ' · قديم') + '</span></div>';
+      }
+      if (ms.lastChochKind) {
+        var cc = (ms.lastChochKind.indexOf('BULL') >= 0) ? '#10b981' : '#ef4444';
+        msRows += '<div class="kv"><span class="kv-key">آخر CHoCH</span><span class="kv-val" style="color:' + cc + '">' + esc(bosLabel(ms.lastChochKind)) + (ms.lastChochFresh ? ' · جديد' : ' · قديم') + '</span></div>';
+      }
+      msHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e2d3d;margin-bottom:12px">'
+        + '<div class="sub-hdr">🏗️ بنية السوق (Market Structure)</div>'
+        + msRows
+        + (ms.reasoning ? '<p style="font-size:10.5px;color:#64748b;margin-top:4px">' + esc(ms.reasoning) + '</p>' : '')
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1302,6 +1335,7 @@ const INLINE_JS = `// ==========================================================
         kzHtml +
         eodHtml +
         cfHtml +
+        msHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
