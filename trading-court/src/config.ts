@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.22-bestpair-verdict-link";
+export const VERSION = "4.6.23-divergence-nearest-pivot";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

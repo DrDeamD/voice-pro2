@@ -102,10 +102,15 @@ export function detectRsiDivergence(
     arr.length >= 2 ? [arr[arr.length - 2], arr[arr.length - 1]] : null;
 
   const matchRsiAt = (arr: { i: number; v: number }[], targetI: number, tol = 3) => {
+    // v4.6.23 — pick the NEAREST RSI pivot within tolerance, not the first in
+    // array order (which could mis-pair when two RSI pivots sit close together).
+    let best: { i: number; v: number } | null = null;
+    let bestD = Infinity;
     for (const p of arr) {
-      if (Math.abs(p.i - targetI) <= tol) return p;
+      const d = Math.abs(p.i - targetI);
+      if (d <= tol && d < bestD) { best = p; bestD = d; }
     }
-    return null;
+    return best;
   };
 
   // Bullish checks (on lows)
