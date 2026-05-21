@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.8-calib-provenance";
+export const VERSION = "4.6.9-divergence-card";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

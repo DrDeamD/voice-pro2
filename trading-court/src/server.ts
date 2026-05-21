@@ -1144,6 +1144,27 @@ const INLINE_JS = `// ==========================================================
       calLine = '<p style="font-size:10.5px;color:#64748b;margin-top:4px">📊 ثقة تقديرية (' + rsn + ')</p>';
     }
 
+    // ── v4.6.9 P2 #8 — RSI Divergence (H1 + M15) ───────────────────────────
+    function divRows(rep, tf) {
+      if (!rep || !rep.signals || rep.signals.length === 0) return '';
+      return rep.signals.map(function(s) {
+        var bull = (s.kind || '').indexOf('BULL') >= 0;
+        var col = bull ? '#10b981' : '#ef4444';
+        var label = (s.kind || '').replace('_', ' ');
+        return '<div class="kv"><span class="kv-key">' + tf + ' · ' + esc(label) + '</span>'
+          + '<span class="kv-val" style="color:' + col + '">قوة ' + Math.round(s.strength || 0) + ' · ' + (s.barsApart || 0) + ' شمعة</span></div>'
+          + (s.note ? '<p style="font-size:10px;color:#64748b;margin:1px 0 4px">' + esc(s.note) + '</p>' : '');
+      }).join('');
+    }
+    var divInner = divRows(p.divergenceH1, 'H1') + divRows(p.divergenceM15, 'M15');
+    var divHtml = '';
+    if (divInner) {
+      divHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e2d3d;margin-bottom:12px">'
+        + '<div class="sub-hdr">انحراف RSI (Divergence)</div>'
+        + divInner
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1206,6 +1227,7 @@ const INLINE_JS = `// ==========================================================
         fibHtml +
         pivHtml +
         orbHtml +
+        divHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +

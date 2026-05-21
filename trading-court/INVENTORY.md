@@ -162,7 +162,8 @@ After v4.3 rebrand:
    empirical (bin range · sample size · win-rate) vs heuristic (with reason).
 
 ### P2 (engine outputs not surfaced)
-8. **Divergence card** (H1 + M15 RSI divergence).
+8. ✅ **Divergence card** (v4.6.9) — H1 + M15 RSI divergence signals (kind, strength,
+   bars apart, note) in detail pane after ORB. Hidden when no signals.
 9. **Manipulation events** (BULLISH_SWEEP / JUDAS_BEAR primary card).
 10. **KillZone label** in detail header.
 11. **EOD gate notice** when "trade won't close same session".
