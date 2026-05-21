@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.9-divergence-card";
+export const VERSION = "4.6.10-manip-card";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

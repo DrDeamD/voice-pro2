@@ -164,7 +164,8 @@ After v4.3 rebrand:
 ### P2 (engine outputs not surfaced)
 8. ✅ **Divergence card** (v4.6.9) — H1 + M15 RSI divergence signals (kind, strength,
    bars apart, note) in detail pane after ORB. Hidden when no signals.
-9. **Manipulation events** (BULLISH_SWEEP / JUDAS_BEAR primary card).
+9. ✅ **Manipulation events** (v4.6.10) — primary sweep/Judas signal (kind, strength,
+   swept level, note) in detail pane after Divergence. Hidden when kind=NONE.
 10. **KillZone label** in detail header.
 11. **EOD gate notice** when "trade won't close same session".
 12. **Calendar feedback signals** (which past actuals are still moving the bias).

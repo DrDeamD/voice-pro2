@@ -1165,6 +1165,20 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }
 
+    // ── v4.6.10 P2 #9 — Manipulation / liquidity sweeps ────────────────────
+    var manip = p.manipulation;
+    var manipHtml = '';
+    if (manip && manip.primary && manip.primary.kind && manip.primary.kind !== 'NONE') {
+      var mk = manip.primary.kind;
+      var mcol = (mk.indexOf('BULL') >= 0) ? '#10b981' : '#ef4444';
+      var mlabel = mk.replace('_', ' ');
+      manipHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid ' + mcol + '40;margin-bottom:12px">'
+        + '<div class="sub-hdr" style="color:' + mcol + '">🎯 تلاعب السيولة: ' + esc(mlabel) + ' · قوة ' + Math.round(manip.primary.strength || 0) + '</div>'
+        + ((manip.primary.level != null) ? '<div class="kv"><span class="kv-key">المستوى</span><span class="kv-val">' + fmt(manip.primary.level, d) + '</span></div>' : '')
+        + '<p style="font-size:11px;color:#cbd5e1;line-height:1.5">' + esc(manip.primary.note || '') + '</p>'
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1228,6 +1242,7 @@ const INLINE_JS = `// ==========================================================
         pivHtml +
         orbHtml +
         divHtml +
+        manipHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
