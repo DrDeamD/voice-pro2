@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.20-session-strength-tables";
+export const VERSION = "4.6.21-best-pair";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {

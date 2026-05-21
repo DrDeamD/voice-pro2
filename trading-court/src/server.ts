@@ -801,7 +801,18 @@ const INLINE_JS = `// ==========================================================
           + '<span style="font-size:10px;font-weight:600;color:' + col + ';width:34px;text-align:left;font-family:monospace">' + (e.score>=0?'+':'') + e.score + '</span>'
           + '</div>';
       }).join('');
-      return tableShell(title, rows);
+      return tableShell(title, rows + bestPairLine(rep));
+    }
+    function bestPairLine(rep) {
+      var bp = rep && rep.bestPair;
+      if (!bp) return '';
+      var col = bp.direction === 'BUY' ? '#10b981' : '#ef4444';
+      var label = (bp.symbol || '').slice(0,3) + '/' + (bp.symbol || '').slice(3);
+      var arEn = bp.direction === 'BUY' ? 'شراء' : 'بيع';
+      return '<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:space-between">'
+        + '<span style="font-size:9px;color:#64748b">أقوى زوج</span>'
+        + '<span style="font-size:10.5px;font-weight:700;color:' + col + ';font-family:monospace">' + arEn + ' ' + esc(label) + ' <span style="color:#64748b;font-weight:400">(فرق ' + Math.abs(Math.round(bp.spread)) + ')</span></span>'
+        + '</div>';
     }
     function tableShell(title, inner) {
       return '<div style="background:#0f172a;border-radius:8px;padding:8px 10px;border:1px solid #1e2d3d">'

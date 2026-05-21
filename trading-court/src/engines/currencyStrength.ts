@@ -39,6 +39,8 @@ export interface CurrencyStrengthReport {
   weakest: string | null;
   /** Total pairs that had a usable change reading. */
   pairsUsed: number;
+  /** v4.6.21 — tradeable pair with the largest strength spread (base − quote). */
+  bestPair: { symbol: string; base: string; quote: string; direction: "BUY" | "SELL"; spread: number } | null;
   reasoning: string;
 }
 
@@ -129,6 +131,22 @@ export function computeCurrencyStrengthWith(
   const strongest = ranked.length > 0 ? ranked[0]! : null;
   const weakest = ranked.length > 0 ? ranked[ranked.length - 1]! : null;
 
+  // v4.6.21 — strongest tradeable pair = the instrument whose base/quote
+  // strength spread is largest. spread>0 → base stronger → BUY; spread<0 → SELL.
+  // This always resolves to a pair in our universe (unlike naively pairing the
+  // single strongest vs weakest currency, which may not have a direct market).
+  let bestPair: CurrencyStrengthReport["bestPair"] = null;
+  for (const sym of Object.keys(INSTRUMENTS)) {
+    const m = INSTRUMENTS[sym];
+    const eb = byCurrency[m.base];
+    const eq = byCurrency[m.quote];
+    if (!eb || !eq || eb.contributingPairs === 0 || eq.contributingPairs === 0) continue;
+    const spread = eb.score - eq.score;
+    if (!bestPair || Math.abs(spread) > Math.abs(bestPair.spread)) {
+      bestPair = { symbol: sym, base: m.base, quote: m.quote, direction: spread >= 0 ? "BUY" : "SELL", spread };
+    }
+  }
+
   const reasoning = pairsUsed === 0
     ? "No change data available — currency strength unavailable"
     : `Strongest: ${strongest} (${byCurrency[strongest!]?.score}), ` +
@@ -141,6 +159,7 @@ export function computeCurrencyStrengthWith(
     strongest,
     weakest,
     pairsUsed,
+    bestPair,
     reasoning,
   };
 }
