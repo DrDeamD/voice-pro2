@@ -1,0 +1,112 @@
+{
+  "version": "3.9.0",
+  "previousVersion": "3.8.0",
+  "buildDate": "2026-05-04",
+  "theme": "Empirical confidence calibration loop — replaces |composite| heuristic with bin-level win-rates from backtest",
+  "compatibility": {
+    "breakingChanges": false,
+    "newPublicAPIs": [
+      "calibration/applyCalibration: applyCalibration(symbol, composite, fallback)",
+      "calibration/buildCalibration: buildCalibrationFromRecords(opts)",
+      "calibration/registry: getCalibration, getCalibratedSymbols, getRegistryVersion"
+    ],
+    "newScripts": [
+      "npm run calibrate -- --pair <SYM> --records <PATH>",
+      "npm run calibrate -- --batch <DIR>",
+      "npm run calibrate -- --show",
+      "npm run calibrate -- --remove <SYM>",
+      "npm run test:calibration"
+    ],
+    "newOptionalFields": [
+      "EngineScores.calibration: { source, confidence, bin?, heuristicReason? }",
+      "warnings entry: 'Confidence: empirical (...)' or 'Confidence: heuristic (...)'"
+    ],
+    "behaviorChange": "When a symbol has calibration data AND the matched |composite| bin has >=20 trades, confidence is now the empirical win-rate (% × 100) instead of |composite|. Without calibration data, behavior is identical to v3.8."
+  },
+  "changedFiles": [
+    {
+      "path": "src/calibration/types.ts",
+      "change": "ADDED",
+      "reason": "CalibrationBin, CalibrationData, CalibrationResult types + MIN_BIN_SAMPLE_SIZE constant"
+    },
+    {
+      "path": "src/calibration/calibrationData.json",
+      "change": "ADDED",
+      "reason": "Bundled registry, empty on first ship, populated by CLI"
+    },
+    {
+      "path": "src/calibration/registry.ts",
+      "change": "ADDED",
+      "reason": "Loads bundled JSON registry; O(1) lookups"
+    },
+    {
+      "path": "src/calibration/applyCalibration.ts",
+      "change": "ADDED",
+      "reason": "Pure decision-time function: composite → calibrated confidence or heuristic fallback"
+    },
+    {
+      "path": "src/calibration/buildCalibration.ts",
+      "change": "ADDED",
+      "reason": "Converts BacktestVerdictRecord[] → CalibrationData"
+    },
+    {
+      "path": "src/calibration/cli.ts",
+      "change": "ADDED",
+      "reason": "npm run calibrate entrypoint: --pair/--records, --batch, --show, --remove"
+    },
+    {
+      "path": "src/engines/court.ts",
+      "change": "MODIFIED",
+      "reason": "composeScores takes symbol and consults applyCalibration. m5Bonus path also re-runs lookup. scores.calibration audit field. Confidence-source warning line."
+    },
+    {
+      "path": "src/tests/calibration.smoke.ts",
+      "change": "ADDED",
+      "reason": "Unit test: empty registry, valid calibration, low-sample fallback, m5Bonus simulation, case-insensitivity"
+    },
+    {
+      "path": "tsconfig.node.json",
+      "change": "MODIFIED",
+      "reason": "Added resolveJsonModule (for registry import) + included src/backtest/** and src/calibration/**. Fixes v3.8 build bug where backtest was excluded."
+    },
+    {
+      "path": "tsconfig.test.json",
+      "change": "MODIFIED",
+      "reason": "Same includes/options as tsconfig.node.json"
+    },
+    {
+      "path": "package.json",
+      "change": "MODIFIED",
+      "reason": "Version 3.9.0. Added calibrate + test:calibration scripts. Added test:calibration to default test pipeline."
+    },
+    {
+      "path": "CHANGES_v3.9.md",
+      "change": "ADDED",
+      "reason": "Full documentation"
+    },
+    {
+      "path": "README.md",
+      "change": "MODIFIED",
+      "reason": "Updated to v3.9 calibration workflow"
+    }
+  ],
+  "verification": {
+    "tscNoEmitProduction": "PASSED (tsconfig.node.json, 0 errors)",
+    "tscNoEmitTest": "PASSED (tsconfig.test.json, 0 errors)",
+    "smokeTest": "PASSED — applyCalibration recovers seeded win-rates from synthetic records (60% → 61.0%, 75% → 74.0%)",
+    "endToEndCli": "PASSED — npm run calibrate ingests backtest dump and updates registry"
+  },
+  "knownLimitations": [
+    "Calibration win-rates reflect technical-setup-only decisions because v3.8 backtest stubs news/calendar/macro context. Production decisions apply news filters on top.",
+    "Bins are coarse (7 buckets on |composite|). Within a bucket, win-rate is assumed uniform.",
+    "No automatic refresh — calibration is bundled at build time. Run npm run calibrate periodically.",
+    "Calibration is per-symbol; EURUSD calibration does NOT apply to other pairs.",
+    "MIN_BIN_SAMPLE_SIZE=20 is a fixed constant; sparse bins continue using heuristic."
+  ],
+  "deferredToNextRound": [
+    "Phase 2B: historical FairEconomy calendar + historical FRED context per replay date (so backtest accuracy improves)",
+    "Phase 2C: historical news archive integration (research effort — need free or cheap source)",
+    "Phase 3: live trade journal with persistent outcome tracking, feeds continuous calibration refresh",
+    "Phase 3+: tier-threshold re-tuning once enough live data accumulates"
+  ]
+}

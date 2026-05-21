@@ -1,0 +1,82 @@
+{
+  "version": "3.10.0",
+  "previousVersion": "3.9.0",
+  "buildDate": "2026-05-04",
+  "theme": "Phase 3 — Live calibration loop. Bridge from existing journal (verdict_log + outcome_log) into the v3.9 calibration registry.",
+  "compatibility": {
+    "breakingChanges": false,
+    "newPublicAPIs": [
+      "calibration/fromJournal: buildRecordsFromJournal(opts), buildRecordsBySymbol(opts)",
+      "VerdictRecord.calibrationContext: optional VerdictCalibrationContext"
+    ],
+    "newScripts": [
+      "npm run calibrate -- --from-journal --pair <SYM>",
+      "npm run calibrate -- --from-journal (all symbols)",
+      "npm run test:calibration-journal"
+    ],
+    "newOptionalFields": [
+      "VerdictRecord.calibrationContext (audit field; optional for backwards compat)"
+    ],
+    "behaviorChange": "VERSION constant bumped from 3.5.6 → 3.10.0. New journal lines tagged 3.10.0. Pre-v3.10 journal lines remain readable; they just lack the calibrationContext field."
+  },
+  "changedFiles": [
+    {
+      "path": "src/calibration/fromJournal.ts",
+      "change": "ADDED",
+      "reason": "Bridge module. Joins verdict_log + outcome_log by verdictId, picks latest outcome per verdict (preferring terminal), maps TP/SL/EXPIRED → WIN/LOSS/TIMEOUT, returns BacktestVerdictRecord[]."
+    },
+    {
+      "path": "src/calibration/cli.ts",
+      "change": "MODIFIED",
+      "reason": "New --from-journal mode (single-symbol or all). Reuses buildCalibrationFromRecords from v3.9 — no duplicate logic. Honest skip stats reported."
+    },
+    {
+      "path": "src/measurement/verdictLog.ts",
+      "change": "MODIFIED",
+      "reason": "Adds VerdictCalibrationContext type and optional calibrationContext field on VerdictRecord. Lets the journal record exactly which bin produced each verdict's confidence."
+    },
+    {
+      "path": "src/measurement/recorder.ts",
+      "change": "MODIFIED",
+      "reason": "buildRecord() reads pair.scores.calibration (set in v3.9 court.ts) and folds into log line. Resilient to missing fields."
+    },
+    {
+      "path": "src/config.ts",
+      "change": "MODIFIED",
+      "reason": "VERSION constant bumped to 3.10.0. New journal lines carry this version tag."
+    },
+    {
+      "path": "src/tests/calibration-from-journal.smoke.ts",
+      "change": "ADDED",
+      "reason": "Real unit test: writes 228-verdict fixture journal, runs bridge, asserts 60.0%/75.0% win-rates recovered exactly + correct skip counts."
+    },
+    {
+      "path": "package.json",
+      "change": "MODIFIED",
+      "reason": "Version 3.10.0. test:calibration-journal script added to default test pipeline."
+    },
+    {
+      "path": "CHANGES_v3.10.md",
+      "change": "ADDED",
+      "reason": "Full documentation of the live calibration loop and production workflow."
+    }
+  ],
+  "verification": {
+    "tscNoEmitProduction": "PASSED (tsconfig.node.json, 0 errors)",
+    "tscNoEmitTest": "PASSED (tsconfig.test.json, 0 errors)",
+    "smokeTest": "PASSED — buildRecordsFromJournal recovered seeded fixture exactly: bin 25-40 (100 trades, 60 wins, 40 losses, 60.0%); bin 40-55 (100 trades, 75 wins, 25 losses, 75.0%); bin 0-15 (10 WAIT, 0 trades); skipped: 10 still_open + 5 fetch_failed",
+    "endToEndCli": "PASSED — `npm run calibrate -- --from-journal --pair EURUSD` ingested fixture journal and updated registry to 60.0%/75.0%"
+  },
+  "knownLimitations": [
+    "MIN_BIN_SAMPLE_SIZE=20 still applies — sparse bins continue using heuristic.",
+    "Tracker latency: outcome enters calibration only after marked terminal (≤24h for day-trades via EXPIRED if SL/TP not hit).",
+    "outcomeBars not recorded by tracker (only outcomePips); calibration math doesn't need it but it's null in journal-derived records.",
+    "Filesystem-based journal (./data/*.jsonl). Cloudflare Workers KV/D1 adapter is future work."
+  ],
+  "deferredToNextRound": [
+    "Continuous nightly refresh + feature flag for 'live calibration auto-update' vs 'pin to deploy'",
+    "Tier-threshold re-tuning from observed win-rate distributions (after ~6mo of live data)",
+    "Workers-native journal storage (KV/D1)",
+    "Phase 2B/2C: historical news/calendar archives for richer backtest cold-start (now lower priority since live data takes over)"
+  ]
+}

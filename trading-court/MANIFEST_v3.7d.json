@@ -1,0 +1,62 @@
+{
+  "version": "3.7d",
+  "previousVersion": "3.7b",
+  "buildDate": "2026-05-04",
+  "changeSet": "v3.7c + v3.7d engineering passes merged",
+  "compatibility": {
+    "breakingChanges": false,
+    "newFields": [
+      "MarketStructureReport.dealingRange",
+      "MarketStructureReport.lastBosKind",
+      "MarketStructureReport.lastBosFresh",
+      "MarketStructureReport.lastChochKind",
+      "MarketStructureReport.lastChochFresh",
+      "PairAnalysis.eodGate",
+      "JudgeOverrideResult.inputs"
+    ],
+    "extendedTypes": [
+      "H4Trend now includes 'UNKNOWN'"
+    ]
+  },
+  "changedFiles": [
+    {
+      "path": "src/engines/court.ts",
+      "change": "MODIFIED",
+      "reason": "m5Bonus re-derivation, EOD gate wiring, type-safe weight resolver"
+    },
+    {
+      "path": "src/engines/dayTradingGate.ts",
+      "change": "ADDED",
+      "reason": "Same-day exit enforcement (user requirement)"
+    },
+    {
+      "path": "src/engines/marketStructure.ts",
+      "change": "MODIFIED",
+      "reason": "ICT dealing range computation; structured lastBos/lastChoch fields"
+    },
+    {
+      "path": "src/engines/judge/judgeEngineV4.ts",
+      "change": "MODIFIED",
+      "reason": "H4Trend UNKNOWN support; finite-check on premiumPct"
+    },
+    {
+      "path": "src/engines/v36/judgeOverride.ts",
+      "change": "REWRITTEN",
+      "reason": "Removed all string/regex parsing; reads structured fields only; null when missing"
+    },
+    {
+      "path": "README.md",
+      "change": "MODIFIED",
+      "reason": "Updated to reflect v3.7d state"
+    }
+  ],
+  "knownLimitations": [
+    "confidence is |composite|, not a calibrated win-rate",
+    "No trade journal; outcome tracking is manual",
+    "Friday cutoff uses fixed 19:00 UTC, not DST-aware"
+  ],
+  "deferredToNextRound": [
+    "Backtest framework on Kraken historical candles",
+    "Confidence calibration from observed win-rates"
+  ]
+}

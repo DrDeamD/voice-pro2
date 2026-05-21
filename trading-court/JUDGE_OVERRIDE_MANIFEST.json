@@ -1,0 +1,13 @@
+{
+  "name": "trading_court_v37b_judge_override_full",
+  "added": [
+    "src/engines/v36/judgeOverride.ts",
+    "src/components/JudgeOverrideBox.tsx",
+    "src/tests/judgeOverride.smoke.ts",
+    "docs/JUDGE_OVERRIDE.md"
+  ],
+  "patched_if_possible": [
+    "src/engines/v36/statCourt.ts"
+  ],
+  "rule": "Bilingual EN/AR messages only inside judgeOverride."
+}

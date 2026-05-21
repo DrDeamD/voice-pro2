@@ -1,0 +1,123 @@
+// ============================================================================
+// Currency Strength Meter — v4.2 Phase 1
+//
+// Aggregates per-currency strength across all instruments in a snapshot.
+// For each pair, the % change attribution flows to the BASE currency as
+// positive (or quote as negative) when the pair is up, and vice versa.
+//
+// Sources of % change, in priority order per pair:
+//   1. quote.changePct (when the data source supplied it — TradingView does)
+//   2. computed from D1 candles (last close vs prior close)
+//   3. computed from H4 candles (last 6 H4 = 24h window)
+//   4. skip pair if no usable change signal
+//
+// Output: per-currency net change score plus a ranked list. Used by:
+//   - Dashboard: top-of-page strength bar
+//   - Judge override: "currency_strength_alignment" rule (Phase 2)
+// ============================================================================
+
+import type { PairAnalysis } from "../types/index.js";
+import { INSTRUMENTS } from "../config.js";
+
+export interface CurrencyStrengthEntry {
+  currency: string;
+  /** Aggregated strength score, normalised to [-100, +100]. */
+  score: number;
+  /** Number of pairs that contributed (more = more reliable). */
+  contributingPairs: number;
+  /** Raw sum of change %s (before normalisation). */
+  rawSum: number;
+}
+
+export interface CurrencyStrengthReport {
+  /** Map by currency code. */
+  byCurrency: Record<string, CurrencyStrengthEntry>;
+  /** Ranked strongest → weakest. */
+  ranked: string[];
+  /** Top + bottom (helpful for "best pair" inference). */
+  strongest: string | null;
+  weakest: string | null;
+  /** Total pairs that had a usable change reading. */
+  pairsUsed: number;
+  reasoning: string;
+}
+
+function extractChangePct(p: PairAnalysis): number | null {
+  // 1) Direct from quote (TradingView populates this; Swissquote often does not)
+  const qchg = p.quote?.changePct;
+  if (typeof qchg === "number" && Number.isFinite(qchg)) return qchg;
+
+  // 2) Compute from D1 candles (yesterday's close vs prior day's close).
+  // The pair has indicators.d1 but we don't carry the raw prev candle. The
+  // analysis does expose `marketStructure.swingsH4` and other H4 history but
+  // the cleanest fallback is to compute from quote.mid vs D1 close.
+  const d1Close = (p as any).indicators?.d1?.lastClose;
+  const mid = p.quote?.mid;
+  if (typeof d1Close === "number" && Number.isFinite(d1Close) && d1Close > 0 &&
+      typeof mid === "number" && Number.isFinite(mid) && mid > 0) {
+    return ((mid - d1Close) / d1Close) * 100;
+  }
+
+  // 3) Last resort: H4 first vs last close (24h proxy). The analysis doesn't
+  // currently surface this, so we skip. To enable, runCourt could attach
+  // change24h alongside the indicators block.
+  return null;
+}
+
+export function computeCurrencyStrength(
+  pairs: PairAnalysis[],
+): CurrencyStrengthReport {
+  const byCurrency: Record<string, CurrencyStrengthEntry> = {};
+  let pairsUsed = 0;
+
+  for (const p of pairs) {
+    const meta = INSTRUMENTS[p.symbol];
+    if (!meta) continue;
+    const chg = extractChangePct(p);
+    if (chg == null) continue;
+    pairsUsed++;
+
+    // For "EURUSD up 0.5%" → EUR +0.5, USD -0.5
+    const { base, quote } = meta;
+    if (!byCurrency[base]) byCurrency[base] = { currency: base, score: 0, contributingPairs: 0, rawSum: 0 };
+    if (!byCurrency[quote]) byCurrency[quote] = { currency: quote, score: 0, contributingPairs: 0, rawSum: 0 };
+    byCurrency[base].rawSum += chg;
+    byCurrency[base].contributingPairs++;
+    byCurrency[quote].rawSum -= chg;
+    byCurrency[quote].contributingPairs++;
+  }
+
+  // Normalise scores to a [-100, +100] range based on max absolute raw sum.
+  let maxAbs = 0;
+  for (const k of Object.keys(byCurrency)) {
+    if (Math.abs(byCurrency[k].rawSum) > maxAbs) maxAbs = Math.abs(byCurrency[k].rawSum);
+  }
+  for (const k of Object.keys(byCurrency)) {
+    const entry = byCurrency[k];
+    entry.score = maxAbs > 0
+      ? Math.round((entry.rawSum / maxAbs) * 100)
+      : 0;
+  }
+
+  const ranked = Object.values(byCurrency)
+    .sort((a, b) => b.score - a.score)
+    .map(e => e.currency);
+
+  const strongest = ranked.length > 0 ? ranked[0]! : null;
+  const weakest = ranked.length > 0 ? ranked[ranked.length - 1]! : null;
+
+  const reasoning = pairsUsed === 0
+    ? "No change data available — currency strength unavailable"
+    : `Strongest: ${strongest} (${byCurrency[strongest!]?.score}), ` +
+      `weakest: ${weakest} (${byCurrency[weakest!]?.score}). ` +
+      `Based on ${pairsUsed} pair change-readings.`;
+
+  return {
+    byCurrency,
+    ranked,
+    strongest,
+    weakest,
+    pairsUsed,
+    reasoning,
+  };
+}

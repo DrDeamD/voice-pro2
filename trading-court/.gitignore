@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime data (verdict/outcome logs, not committed)
+data/
+
+# PM2 logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backtest artefacts
+results/
+*.zip

@@ -1,0 +1,93 @@
+{
+  "version": "3.8.0",
+  "previousVersion": "3.7d",
+  "buildDate": "2026-05-04",
+  "theme": "Source diversification (8 central banks + FRED) + Backtest framework",
+  "compatibility": {
+    "breakingChanges": false,
+    "newPublicAPIs": [
+      "fetchers/centralBanks.ts: fetchCentralBankNews, fetchCentralBankNewsForPair, probeCentralBankFeeds",
+      "fetchers/fred.ts: fetchFredSeries, fetchFredContext",
+      "engines/court.ts: runCourt(input), CourtInput interface",
+      "backtest/loadHistdata.ts: loadHistdataM1, resampleM1, buildSeriesFromM1, loadHistdataAsSeries",
+      "backtest/replay.ts: replayBacktest",
+      "backtest/calibrate.ts: calibrate, BacktestVerdictRecord, CalibrationReport"
+    ],
+    "newScripts": [
+      "npm run backtest -- --pair <SYMBOL> --csv <PATH>"
+    ],
+    "newOptionalFields": [
+      "ContextChanges.sourceUsed (per-indicator provenance: tv | fred | missing)",
+      "CourtInput.backtestMode (skips freshness vetoes for historical replay)"
+    ]
+  },
+  "changedFiles": [
+    {
+      "path": "src/fetchers/centralBanks.ts",
+      "change": "ADDED",
+      "reason": "Direct primary-source RSS for Fed, ECB, BoE, BoJ, RBA, BoC, RBNZ, SNB. Bypasses intermediary delay."
+    },
+    {
+      "path": "src/fetchers/fred.ts",
+      "change": "ADDED",
+      "reason": "FRED CSV endpoint for DXY proxy, US10Y/2Y, VIX, oil, gold, fed funds. No API key. Historical data for Phase 2 backtest."
+    },
+    {
+      "path": "src/fetchers/context.ts",
+      "change": "MODIFIED",
+      "reason": "TradingView primary, FRED fallback. Adds sourceUsed map for per-indicator provenance audit."
+    },
+    {
+      "path": "src/fetchers/news.ts",
+      "change": "MODIFIED",
+      "reason": "Wires central-bank direct feeds as 4th parallel source in fetchNewsForPair. CB items prioritized in dedupe."
+    },
+    {
+      "path": "src/engines/court.ts",
+      "change": "REFACTORED",
+      "reason": "Body of analyzePair extracted into pure runCourt(input). Backtest can now invoke engine logic with pre-loaded historical data."
+    },
+    {
+      "path": "src/backtest/loadHistdata.ts",
+      "change": "ADDED",
+      "reason": "HistData.com Generic ASCII M1 CSV loader. EST→UTC conversion. Resampling M1→M5/M15/H1/H4/D1."
+    },
+    {
+      "path": "src/backtest/replay.ts",
+      "change": "ADDED",
+      "reason": "Walks M1 candles, calls runCourt at every Nth bar, computes WIN/LOSS/TIMEOUT outcome by scanning forward bars for SL/TP hit."
+    },
+    {
+      "path": "src/backtest/calibrate.ts",
+      "change": "ADDED",
+      "reason": "Bins records by |composite|. Computes win-rate, net pips, expectancy per bin, per verdict, per confidence tier."
+    },
+    {
+      "path": "src/backtest/cli.ts",
+      "change": "ADDED",
+      "reason": "CLI entrypoint. Loads CSV → runs replay → prints calibration tables → optional JSON dump."
+    },
+    {
+      "path": "package.json",
+      "change": "MODIFIED",
+      "reason": "Version bump to 3.8.0. Added 'backtest' script."
+    },
+    {
+      "path": "CHANGES_v3.8.md",
+      "change": "ADDED",
+      "reason": "Full documentation of source diversification + backtest framework."
+    }
+  ],
+  "knownLimitations": [
+    "Central-bank RSS URLs cannot be probed from this development sandbox (egress firewall blocks all 8 domains). Production verification must happen from Cloudflare Workers deployment via the source-health pill bar.",
+    "RBNZ feed flagged REQUIRES_FIRST_RUN_CHECK due to historical URL changes.",
+    "DXY proxy via FRED's DTWEXBGS is Trade-Weighted USD Broad, not ICE DXY. Correlated ~0.95 but not identical.",
+    "Backtest Phase 1: news engine, calendar, and macro context are stubbed. Calibrates technical engines only.",
+    "HistData volumes are always 0; resampler uses M1 bar count as synthetic volume proxy."
+  ],
+  "deferredToNextRound": [
+    "Phase 2 backtest: historical news archive, FairEconomy calendar archive, FRED historical context per replay date",
+    "Confidence calibration loop: use calibrate.ts output to replace |composite| heuristic with empirical win-rates",
+    "Trade journal: persistent storage of live verdicts + outcomes for continuous calibration refresh"
+  ]
+}

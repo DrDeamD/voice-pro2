@@ -1,0 +1,6 @@
+{
+  "$schema": "Trading Court calibration registry v3.10",
+  "$description": "Per-symbol empirical confidence calibration data. Populated by `npm run calibrate` (offline from backtest, or live from journal via --from-journal). When a symbol is absent, the system falls back to the heuristic confidence = |composite|.",
+  "version": "3.10",
+  "data": {}
+}

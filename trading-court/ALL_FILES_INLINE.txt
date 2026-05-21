@@ -1,0 +1,1031 @@
+===== src/engines/v36/statTypes.ts =====
+// ============================================================================
+// Trading Court Pro v3.6 — Statistical Court Types
+// Direct integration with existing v3.5.6 types.
+// No dummy data. No synthetic prices. No random numbers.
+// ============================================================================
+
+import type { Candle } from "../../types/index.js";
+
+export type V36WitnessName =
+  | "RealizedVolBipower"
+  | "HurstExponent"
+  | "GARCH"
+  | "HawkesLite"
+  | "ForbesRigobon";
+
+export type V36Side = "LONG" | "SHORT" | "FLAT";
+
+export interface V36WitnessResult {
+  name: V36WitnessName;
+  signal: number;       // -100..+100
+  confidence: number;   // 0..1
+  reliable: boolean;
+  reasons: string[];
+  metrics?: Record<string, number | string | boolean | null>;
+}
+
+export interface V36TruthResult {
+  ok: boolean;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface V36StatCourtResult {
+  allowed: boolean;
+  side: V36Side;
+  sideScore: number;
+  trustScore: number;
+  confidenceCap: number;
+  confidenceDelta: number;
+  witnesses: V36WitnessResult[];
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface V36CandleBundle {
+  m5: Candle[];
+  m15: Candle[];
+  h1: Candle[];
+  h4: Candle[];
+}
+
+
+===== src/engines/v36/statMath.ts =====
+// ============================================================================
+// Trading Court Pro v3.6 — Statistical Witness Math
+// Pure TypeScript. Deterministic. No API calls. No fake data.
+// ============================================================================
+
+import type { Candle } from "../../types/index.js";
+import type { V36WitnessResult } from "./statTypes.js";
+
+const EPS = 1e-12;
+const MU1 = Math.sqrt(2 / Math.PI);
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+function mean(xs: number[]): number {
+  return xs.reduce((s, x) => s + x, 0) / xs.length;
+}
+
+function variance(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = mean(xs);
+  return xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1);
+}
+
+function std(xs: number[]): number {
+  return Math.sqrt(Math.max(0, variance(xs)));
+}
+
+export function logReturns(candles: Candle[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const p0 = candles[i - 1].c;
+    const p1 = candles[i].c;
+    if (Number.isFinite(p0) && Number.isFinite(p1) && p0 > 0 && p1 > 0) {
+      out.push(Math.log(p1 / p0));
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// 1) Realized Vol + Bipower
+// ---------------------------------------------------------------------------
+export function realizedVolBipowerWitness(candles: Candle[]): V36WitnessResult {
+  const r = logReturns(candles);
+  if (r.length < 48) {
+    return { name: "RealizedVolBipower", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_returns"] };
+  }
+
+  let rv = 0;
+  for (const x of r) rv += x * x;
+
+  let bv = 0;
+  for (let i = 1; i < r.length; i++) {
+    bv += Math.abs(r[i]) * Math.abs(r[i - 1]);
+  }
+  bv = bv / (MU1 * MU1);
+
+  if (!Number.isFinite(rv) || !Number.isFinite(bv) || rv <= EPS) {
+    return { name: "RealizedVolBipower", signal: 0, confidence: 0, reliable: false, reasons: ["invalid_rv_bv"] };
+  }
+
+  const jumpRatio = clamp(Math.max(0, (rv - bv) / (rv + EPS)), 0, 1);
+  let signal = +20;
+  let confidence = Math.min(1, r.length / 96) * 0.6;
+  const reasons = [`jumpRatio=${jumpRatio.toFixed(4)}`];
+
+  if (jumpRatio >= 0.45) {
+    signal = -70;
+    confidence = Math.min(1, r.length / 96) * 0.85;
+    reasons.push("jump_or_spike_risk");
+  } else if (jumpRatio >= 0.25) {
+    signal = -35;
+    confidence = Math.min(1, r.length / 96) * 0.65;
+    reasons.push("moderate_jump_risk");
+  }
+
+  return {
+    name: "RealizedVolBipower",
+    signal,
+    confidence,
+    reliable: confidence >= 0.25,
+    reasons,
+    metrics: { rv, bv, jumpRatio },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2) Hurst Exponent
+// ---------------------------------------------------------------------------
+function linearRegression(xs: number[], ys: number[]) {
+  const xm = mean(xs);
+  const ym = mean(ys);
+  let num = 0;
+  let den = 0;
+
+  for (let i = 0; i < xs.length; i++) {
+    num += (xs[i] - xm) * (ys[i] - ym);
+    den += (xs[i] - xm) ** 2;
+  }
+
+  const slope = den <= EPS ? 0 : num / den;
+  const intercept = ym - slope * xm;
+
+  let ssTot = 0;
+  let ssRes = 0;
+  for (let i = 0; i < xs.length; i++) {
+    const fitted = intercept + slope * xs[i];
+    ssTot += (ys[i] - ym) ** 2;
+    ssRes += (ys[i] - fitted) ** 2;
+  }
+
+  const r2 = ssTot <= EPS ? 0 : 1 - ssRes / ssTot;
+  return { slope, r2: clamp(r2, 0, 1) };
+}
+
+export function hurstWitness(candles: Candle[]): V36WitnessResult {
+  const prices = candles.map(c => c.c).filter(p => Number.isFinite(p) && p > 0);
+  if (prices.length < 128) {
+    return { name: "HurstExponent", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_prices"] };
+  }
+
+  const lags = [2, 4, 8, 16, 32];
+  const logLags: number[] = [];
+  const logVars: number[] = [];
+
+  for (const lag of lags) {
+    if (prices.length <= lag + 10) continue;
+    const diffs: number[] = [];
+    for (let i = lag; i < prices.length; i++) {
+      diffs.push(Math.log(prices[i]) - Math.log(prices[i - lag]));
+    }
+    const v = variance(diffs);
+    if (v > EPS && Number.isFinite(v)) {
+      logLags.push(Math.log(lag));
+      logVars.push(Math.log(v));
+    }
+  }
+
+  if (logLags.length < 3) {
+    return { name: "HurstExponent", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_lags"] };
+  }
+
+  const reg = linearRegression(logLags, logVars);
+  const h = clamp(reg.slope / 2, 0, 1);
+
+  if (reg.r2 < 0.30) {
+    return {
+      name: "HurstExponent",
+      signal: 0,
+      confidence: 0,
+      reliable: false,
+      reasons: [`hurst=${h.toFixed(4)}`, `r2=${reg.r2.toFixed(4)}`, "low_r2"],
+      metrics: { hurst: h, r2: reg.r2 },
+    };
+  }
+
+  let signal = 0;
+  if (h > 0.58) signal = +30;
+  else if (h < 0.42) signal = -30;
+
+  const confidence = reg.r2 < 0.50 ? Math.min(0.35, reg.r2) : Math.min(1, reg.r2);
+
+  return {
+    name: "HurstExponent",
+    signal,
+    confidence,
+    reliable: true,
+    reasons: [`hurst=${h.toFixed(4)}`, `r2=${reg.r2.toFixed(4)}`],
+    metrics: { hurst: h, r2: reg.r2 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 3) GARCH(1,1), deterministic grid
+// ---------------------------------------------------------------------------
+function fitGarchGrid(r: number[]) {
+  const var0 = variance(r);
+  let best = { alpha: 0.05, beta: 0.90, ll: -Infinity };
+
+  if (var0 <= EPS) return { ...best, reliable: false };
+
+  for (let ai = 3; ai <= 20; ai += 2) {
+    const alpha = ai / 100;
+
+    for (let bi = 70; bi <= 96; bi += 2) {
+      const beta = bi / 100;
+      if (alpha + beta >= 0.98) continue;
+
+      const omega = var0 * (1 - alpha - beta);
+      if (omega <= 0) continue;
+
+      let sigma2 = var0;
+      let ll = 0;
+
+      for (let t = 1; t < r.length; t++) {
+        sigma2 = omega + alpha * r[t - 1] ** 2 + beta * sigma2;
+        if (sigma2 <= EPS || !Number.isFinite(sigma2)) {
+          ll = -Infinity;
+          break;
+        }
+        ll += -0.5 * (Math.log(2 * Math.PI) + Math.log(sigma2) + (r[t] ** 2) / sigma2);
+      }
+
+      if (ll > best.ll) best = { alpha, beta, ll };
+    }
+  }
+
+  return { ...best, reliable: Number.isFinite(best.ll) };
+}
+
+export function garchWitness(candles: Candle[]): V36WitnessResult {
+  const r = logReturns(candles);
+  if (r.length < 96) {
+    return { name: "GARCH", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_returns"] };
+  }
+
+  const fit = fitGarchGrid(r);
+  if (!fit.reliable) {
+    return { name: "GARCH", signal: 0, confidence: 0, reliable: false, reasons: ["fit_failed"] };
+  }
+
+  const persistence = fit.alpha + fit.beta;
+  let signal = 0;
+  const reasons = [
+    `alpha=${fit.alpha.toFixed(2)}`,
+    `beta=${fit.beta.toFixed(2)}`,
+    `persistence=${persistence.toFixed(2)}`,
+  ];
+
+  if (persistence > 0.97) {
+    signal = -80;
+    reasons.push("non_stationary_risk");
+  } else if (persistence > 0.94) {
+    signal = -35;
+    reasons.push("high_persistence");
+  } else if (persistence < 0.85) {
+    signal = +20;
+    reasons.push("stable_variance");
+  }
+
+  const confidence = Math.min(1, r.length / 192);
+
+  return {
+    name: "GARCH",
+    signal,
+    confidence,
+    reliable: confidence >= 0.25,
+    reasons,
+    metrics: { alpha: fit.alpha, beta: fit.beta, persistence },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 4) Hawkes-lite, candle-event clustering only
+// ---------------------------------------------------------------------------
+function extractDirectionalEvents(candles: Candle[], zThreshold = 1.25) {
+  const r = logReturns(candles);
+  if (r.length < 30) return { longEvents: [] as number[], shortEvents: [] as number[], n: r.length };
+
+  const m = mean(r);
+  const s = std(r);
+  if (s <= EPS) return { longEvents: [] as number[], shortEvents: [] as number[], n: r.length };
+
+  const longEvents: number[] = [];
+  const shortEvents: number[] = [];
+
+  for (let i = 0; i < r.length; i++) {
+    const z = (r[i] - m) / (s + EPS);
+    const c = candles[i + 1];
+
+    if (z >= zThreshold && c.c > c.o) longEvents.push(i);
+    if (z <= -zThreshold && c.c < c.o) shortEvents.push(i);
+  }
+
+  return { longEvents, shortEvents, n: r.length };
+}
+
+function intensityAt(t: number, events: number[], mu: number, alpha: number, beta: number): number {
+  let lambda = mu;
+  for (const e of events) {
+    if (e < t) lambda += alpha * Math.exp(-beta * (t - e));
+  }
+  return Math.max(EPS, lambda);
+}
+
+function estimateAlpha(events: number[], n: number, beta = 1.0) {
+  if (events.length < 2 || n <= 0) return { alpha: 0, reliable: false };
+
+  const mu = events.length / n;
+  let bestAlpha = 0;
+  let bestLL = -Infinity;
+
+  for (let ai = 0; ai <= 98; ai += 2) {
+    const alpha = ai / 100;
+    if (alpha / beta >= 1) continue;
+
+    let ll = 0;
+
+    for (const t of events) {
+      ll += Math.log(intensityAt(t, events, mu, alpha, beta) + EPS);
+    }
+
+    for (let t = 0; t < n; t++) {
+      ll -= intensityAt(t, events, mu, alpha, beta);
+    }
+
+    if (ll > bestLL) {
+      bestLL = ll;
+      bestAlpha = alpha;
+    }
+  }
+
+  return { alpha: bestAlpha, reliable: Number.isFinite(bestLL) };
+}
+
+export function hawkesLiteWitness(candles: Candle[]): V36WitnessResult {
+  if (candles.length < 80) {
+    return { name: "HawkesLite", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_candles"] };
+  }
+
+  const ev = extractDirectionalEvents(candles);
+  const totalEvents = ev.longEvents.length + ev.shortEvents.length;
+
+  if (ev.n < 72 || totalEvents < 4) {
+    return { name: "HawkesLite", signal: 0, confidence: 0, reliable: false, reasons: ["insufficient_events"] };
+  }
+
+  const beta = 1.0;
+  const lf = estimateAlpha(ev.longEvents, ev.n, beta);
+  const sf = estimateAlpha(ev.shortEvents, ev.n, beta);
+
+  if (!lf.reliable && !sf.reliable) {
+    return { name: "HawkesLite", signal: 0, confidence: 0, reliable: false, reasons: ["fit_failed"] };
+  }
+
+  const longExcitation = lf.alpha / beta;
+  const shortExcitation = sf.alpha / beta;
+  const maxExcitation = Math.max(longExcitation, shortExcitation);
+  const signal = clamp(100 * (longExcitation - shortExcitation), -100, 100);
+
+  const sampleConfidence = Math.min(1, ev.n / 144);
+  const eventConfidence = Math.min(1, totalEvents / 12);
+  const stability = Math.max(0, 1 - maxExcitation);
+  const confidence = clamp(sampleConfidence * eventConfidence * (0.5 + 0.5 * stability), 0, 1);
+
+  return {
+    name: "HawkesLite",
+    signal: confidence >= 0.25 && maxExcitation < 1 ? signal : 0,
+    confidence: confidence >= 0.25 && maxExcitation < 1 ? confidence : 0,
+    reliable: confidence >= 0.25 && maxExcitation < 1,
+    reasons: [
+      `longEvents=${ev.longEvents.length}`,
+      `shortEvents=${ev.shortEvents.length}`,
+      `longAlpha=${lf.alpha.toFixed(2)}`,
+      `shortAlpha=${sf.alpha.toFixed(2)}`,
+    ],
+    metrics: {
+      longEvents: ev.longEvents.length,
+      shortEvents: ev.shortEvents.length,
+      longAlpha: lf.alpha,
+      shortAlpha: sf.alpha,
+    },
+  };
+}
+
+
+===== src/engines/v36/truth.ts =====
+// ============================================================================
+// Trading Court Pro v3.6 — Data Truth Gate
+// Blocks fake/synthetic/stale/malformed candle streams before statistical use.
+// ============================================================================
+
+import type { CandleSeries, Quote } from "../../types/index.js";
+import type { V36TruthResult } from "./statTypes.js";
+
+const REQUIRED = ["5m", "15m", "1h", "4h"] as const;
+
+function validCandles(series: CandleSeries | undefined): boolean {
+  if (!series?.available || !Array.isArray(series.candles) || series.candles.length === 0) return false;
+
+  for (let i = 0; i < series.candles.length; i++) {
+    const c = series.candles[i];
+    if (![c.t, c.o, c.h, c.l, c.c].every(Number.isFinite)) return false;
+    if (c.o <= 0 || c.h <= 0 || c.l <= 0 || c.c <= 0) return false;
+    if (c.h < c.l) return false;
+    if (c.o > c.h || c.o < c.l || c.c > c.h || c.c < c.l) return false;
+    if (i > 0 && c.t <= series.candles[i - 1].t) return false;
+  }
+
+  return true;
+}
+
+function isSyntheticOrPseudo(series: CandleSeries | undefined): boolean {
+  const source = `${series?.source ?? ""} ${series?.note ?? ""}`.toLowerCase();
+  return (
+    source.includes("synthetic") ||
+    source.includes("audusd") && source.includes("nzd") ||
+    source.includes("pt5h") ||
+    source.includes("closest to h4")
+  );
+}
+
+export function v36TruthGate(
+  symbol: string,
+  quote: Quote,
+  series: Record<string, CandleSeries>,
+): V36TruthResult {
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  if (!quote.available) reasons.push("v36_quote_unavailable");
+  if (!Number.isFinite(quote.bid) || !Number.isFinite(quote.ask) || quote.bid <= 0 || quote.ask <= 0 || quote.ask < quote.bid) {
+    reasons.push("v36_quote_invalid_bid_ask");
+  }
+
+  const quoteAgeSec = quote.available ? Math.max(0, (Date.now() - quote.ts) / 1000) : Infinity;
+  if (quoteAgeSec > 120) reasons.push(`v36_quote_stale_${Math.round(quoteAgeSec)}s`);
+
+  for (const tf of REQUIRED) {
+    const s = series[tf];
+
+    if (!validCandles(s)) {
+      reasons.push(`v36_${tf}_candles_invalid_or_missing`);
+      continue;
+    }
+
+    if (isSyntheticOrPseudo(s)) {
+      reasons.push(`v36_${tf}_source_not_truth_contract:${s?.source ?? "unknown"}`);
+      continue;
+    }
+
+    const last = s.candles[s.candles.length - 1];
+    const ageSec = Math.max(0, Date.now() / 1000 - last.t);
+
+    const maxAge =
+      tf === "5m" ? 15 * 60 :
+      tf === "15m" ? 40 * 60 :
+      tf === "1h" ? 3 * 60 * 60 :
+      8 * 60 * 60;
+
+    if (ageSec > maxAge) reasons.push(`v36_${tf}_stale_${Math.round(ageSec / 60)}m`);
+  }
+
+  // Explicitly flag known old-code truth issue: NZDUSD must not come from synthetic fallback.
+  if (symbol === "NZDUSD") {
+    for (const tf of REQUIRED) {
+      if (isSyntheticOrPseudo(series[tf])) {
+        reasons.push(`v36_nzdusd_synthetic_forbidden_${tf}`);
+      }
+    }
+  }
+
+  // H4 from Investing PT5H is blocked by isSyntheticOrPseudo. H4 resample from real H1 is allowed
+  // because it is deterministic and source-labelled "+resample4h".
+  for (const tf of REQUIRED) {
+    const s = series[tf];
+    if (s?.source?.includes("+resample4h")) warnings.push(`v36_${tf}_resampled_from_real_h1`);
+  }
+
+  return {
+    ok: reasons.length === 0,
+    reasons,
+    warnings,
+  };
+}
+
+
+===== src/engines/v36/statCourt.ts =====
+// ============================================================================
+// Trading Court Pro v3.6 — Statistical Court Overlay
+// Directly wraps old analyzePair() output using the real candles already fetched.
+// No new API source. No dummy values. Missing/invalid data => WAIT.
+// ============================================================================
+
+import type {
+  CandleSeries,
+  Direction,
+  EngineScores,
+  PairAnalysis,
+  Quote,
+  Verdict,
+} from "../../types/index.js";
+
+import { classifyConfidence } from "../tradePlan.js";
+import { v36TruthGate } from "./truth.js";
+import {
+  realizedVolBipowerWitness,
+  hurstWitness,
+  garchWitness,
+  hawkesLiteWitness,
+} from "./statMath.js";
+import type { V36StatCourtResult, V36WitnessResult } from "./statTypes.js";
+
+const MIN_CONFIDENCE = 77;
+const MIN_TRUST_SCORE = 60;
+const MIN_DIRECTIONAL_WITNESSES = 2;
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+function directionToSignal(d: Direction, magnitude: number): number {
+  if (d === "LONG") return magnitude;
+  if (d === "SHORT") return -magnitude;
+  return 0;
+}
+
+function signalToDirection(score: number): Direction {
+  if (score >= 45) return "LONG";
+  if (score <= -45) return "SHORT";
+  return "FLAT";
+}
+
+function directionToVerdict(d: Direction): Verdict {
+  if (d === "LONG") return "BUY";
+  if (d === "SHORT") return "SELL";
+  return "WAIT";
+}
+
+function weightedAverage(items: { value: number; weight: number }[]): number {
+  const valid = items.filter(x => Number.isFinite(x.value) && x.weight > 0);
+  if (!valid.length) return 0;
+  const w = valid.reduce((s, x) => s + x.weight, 0);
+  return valid.reduce((s, x) => s + x.value * x.weight, 0) / w;
+}
+
+function classicalDirectionalWitnesses(analysis: PairAnalysis): V36WitnessResult[] {
+  const out: V36WitnessResult[] = [];
+
+  // Old system evidence, but only as directional witnesses.
+  const mtfMag = Math.min(100, Math.abs(analysis.mtf.alignment || 0));
+  if (analysis.mtf.direction !== "FLAT" && mtfMag >= 25) {
+    out.push({
+      name: "HawkesLite", // directional bucket name is not used externally here
+      signal: directionToSignal(analysis.mtf.direction, mtfMag),
+      confidence: clamp(mtfMag / 100, 0.25, 0.95),
+      reliable: true,
+      reasons: [`old_mtf=${analysis.mtf.direction}`, `alignment=${analysis.mtf.alignment}`],
+      metrics: { source: "old_mtf" },
+    });
+  }
+
+  const comp = analysis.scores?.composite ?? 0;
+  const oldDir = analysis.scores?.direction ?? "FLAT";
+  if (oldDir !== "FLAT" && Math.abs(comp) >= 25) {
+    out.push({
+      name: "HawkesLite",
+      signal: directionToSignal(oldDir, Math.min(100, Math.abs(comp))),
+      confidence: clamp((analysis.scores.confidence ?? 0) / 100, 0.25, 0.95),
+      reliable: true,
+      reasons: [`old_composite_dir=${oldDir}`, `old_composite=${comp}`],
+      metrics: { source: "old_composite" },
+    });
+  }
+
+  return out;
+}
+
+function hasConflict(witnesses: V36WitnessResult[]): boolean {
+  const strong = witnesses.filter(w => w.reliable && Math.abs(w.signal) >= 30);
+  return strong.some(w => w.signal > 0) && strong.some(w => w.signal < 0);
+}
+
+function computeV36Court(
+  analysis: PairAnalysis,
+  statWitnesses: V36WitnessResult[],
+): V36StatCourtResult {
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  const classical = classicalDirectionalWitnesses(analysis);
+  const directional = [
+    ...classical,
+    ...statWitnesses.filter(w => w.name === "HawkesLite"),
+  ].filter(w => w.reliable);
+
+  const trust = statWitnesses.filter(w =>
+    w.reliable &&
+    (w.name === "RealizedVolBipower" || w.name === "HurstExponent" || w.name === "GARCH")
+  );
+
+  if (directional.length < MIN_DIRECTIONAL_WITNESSES) {
+    return {
+      allowed: false,
+      side: "FLAT",
+      sideScore: 0,
+      trustScore: 0,
+      confidenceCap: 0,
+      confidenceDelta: 0,
+      witnesses: statWitnesses,
+      reasons: [`v36_not_enough_directional_witnesses_${directional.length}`],
+      warnings,
+    };
+  }
+
+  if (hasConflict(directional)) {
+    return {
+      allowed: false,
+      side: "FLAT",
+      sideScore: 0,
+      trustScore: 0,
+      confidenceCap: 0,
+      confidenceDelta: 0,
+      witnesses: statWitnesses,
+      reasons: ["v36_direction_conflict"],
+      warnings,
+    };
+  }
+
+  const sideScore = clamp(
+    weightedAverage(directional.map(w => ({ value: w.signal, weight: w.confidence }))),
+    -100,
+    100,
+  );
+
+  const trustRaw = weightedAverage(trust.map(w => ({ value: w.signal, weight: w.confidence })));
+  let trustScore = clamp(50 + trustRaw * 0.5, 0, 100);
+
+  let confidenceCap = 100;
+
+  for (const w of trust) {
+    if (w.name === "RealizedVolBipower" && w.signal <= -35) {
+      confidenceCap = Math.min(confidenceCap, 65);
+      reasons.push("v36_jump_or_spike_risk");
+    }
+    if (w.name === "GARCH" && w.signal <= -35) {
+      confidenceCap = Math.min(confidenceCap, 72);
+      reasons.push("v36_garch_unstable");
+    }
+    if (w.name === "HurstExponent" && w.signal < 0) {
+      confidenceCap = Math.min(confidenceCap, 72);
+      reasons.push("v36_mean_reverting_environment");
+    }
+  }
+
+  const side = signalToDirection(sideScore);
+  if (side === "FLAT") reasons.push("v36_side_score_too_weak");
+
+  if (trustScore < MIN_TRUST_SCORE) reasons.push("v36_trust_score_below_60");
+
+  // Delta is intentionally conservative. The overlay can reduce confidence more
+  // than it boosts it. Old system remains the main engine; v3.6 is a truth/risk court.
+  let confidenceDelta = 0;
+  if (trustScore >= 70 && Math.abs(sideScore) >= 60) confidenceDelta += 3;
+  if (trustScore < 60) confidenceDelta -= 12;
+  if (confidenceCap < 100) confidenceDelta -= 8;
+
+  const oldConf = analysis.scores.confidence ?? 0;
+  const newConf = Math.min(confidenceCap, clamp(oldConf + confidenceDelta, 0, 100));
+
+  const allowed =
+    side !== "FLAT" &&
+    newConf >= MIN_CONFIDENCE &&
+    trustScore >= MIN_TRUST_SCORE &&
+    reasons.filter(r => r.includes("risk") || r.includes("unstable") || r.includes("mean_reverting")).length === 0;
+
+  return {
+    allowed,
+    side,
+    sideScore,
+    trustScore,
+    confidenceCap,
+    confidenceDelta,
+    witnesses: statWitnesses,
+    reasons,
+    warnings,
+  };
+}
+
+export function applyV36StatisticalCourt(
+  analysis: PairAnalysis,
+  input: {
+    symbol: string;
+    quote: Quote;
+    series: Record<string, CandleSeries>;
+  },
+): PairAnalysis {
+  const truth = v36TruthGate(input.symbol, input.quote, input.series);
+
+  const h1 = input.series["1h"]?.candles ?? [];
+
+  const statWitnesses: V36WitnessResult[] = truth.ok ? [
+    realizedVolBipowerWitness(h1),
+    hurstWitness(h1),
+    garchWitness(h1),
+    hawkesLiteWitness(h1),
+  ] : [];
+
+  const court = truth.ok
+    ? computeV36Court(analysis, statWitnesses)
+    : {
+        allowed: false,
+        side: "FLAT" as Direction,
+        sideScore: 0,
+        trustScore: 0,
+        confidenceCap: 0,
+        confidenceDelta: 0,
+        witnesses: statWitnesses,
+        reasons: truth.reasons,
+        warnings: truth.warnings,
+      };
+
+  const oldConfidence = analysis.scores.confidence ?? 0;
+  const newConfidence = truth.ok
+    ? Math.min(court.confidenceCap, clamp(oldConfidence + court.confidenceDelta, 0, 100))
+    : 0;
+
+  const [confidenceTier, sizeMultiplier] = classifyConfidence(newConfidence);
+
+  let nextVerdict: Verdict = analysis.verdict;
+  let nextDirection: Direction = analysis.scores.direction;
+
+  // Hard truth failure always WAIT.
+  if (!truth.ok) {
+    nextVerdict = "WAIT";
+    nextDirection = "FLAT";
+  } else if (!court.allowed) {
+    nextVerdict = "WAIT";
+    nextDirection = "FLAT";
+  } else {
+    nextDirection = court.side;
+    nextVerdict = directionToVerdict(court.side);
+  }
+
+  const v36Reasons = [
+    ...truth.reasons,
+    ...court.reasons,
+  ];
+
+  const warnings = [
+    ...analysis.warnings,
+    ...truth.warnings.map(w => `V36 Truth: ${w}`),
+    ...court.warnings.map(w => `V36: ${w}`),
+    ...v36Reasons.map(r => `V36 Gate: ${r}`),
+  ];
+
+  const scores: EngineScores = {
+    ...analysis.scores,
+    direction: nextDirection,
+    confidence: newConfidence,
+    confidenceTier,
+    sizeMultiplier,
+  };
+
+  const plan = {
+    ...analysis.plan,
+    direction: nextDirection,
+    confidenceTier,
+    sizeMultiplier,
+    notes: [
+      ...analysis.plan.notes,
+      ...v36Reasons.map(r => `V36: ${r}`),
+    ],
+  };
+
+  return {
+    ...analysis,
+    scores,
+    plan,
+    verdict: nextVerdict,
+    warnings,
+    summary: nextVerdict === "WAIT"
+      ? `${analysis.summary} | V36 Statistical Court: WAIT (${v36Reasons.join(", ") || "risk/truth gate"})`
+      : `${analysis.summary} | V36 Statistical Court: confirmed`,
+    verdictExplanation: {
+      ...analysis.verdictExplanation,
+      why: [
+        ...analysis.verdictExplanation.why,
+        `V36 trustScore ${court.trustScore.toFixed(0)}, sideScore ${court.sideScore.toFixed(1)}, confidenceCap ${court.confidenceCap}`,
+      ],
+      missing: nextVerdict === "WAIT"
+        ? [...analysis.verdictExplanation.missing, ...v36Reasons]
+        : analysis.verdictExplanation.missing,
+      nextSteps: nextVerdict === "WAIT"
+        ? [...analysis.verdictExplanation.nextSteps, "Wait until V36 truth/statistical gates clear"]
+        : analysis.verdictExplanation.nextSteps,
+    },
+    ...({
+      v36: {
+        truth,
+        court,
+        oldConfidence,
+        newConfidence,
+        witnesses: statWitnesses,
+      },
+    } as any),
+  };
+}
+
+
+===== docs/V36_DIRECT_INTEGRATION.md =====
+# Trading Court v3.6 — Direct Integration Patch
+
+This patch is designed for the existing v3.5.6 project.
+
+It does **not** create dummy candles.  
+It does **not** fetch new external APIs.  
+It does **not** fabricate values.  
+It uses the real `quote` and `series` already fetched inside `src/engines/court.ts`.
+
+## Files to copy
+
+Copy this folder into the project root:
+
+```text
+src/engines/v36/statTypes.ts
+src/engines/v36/statMath.ts
+src/engines/v36/truth.ts
+src/engines/v36/statCourt.ts
+```
+
+These files are included by `tsconfig.node.json` because it already includes `src/engines/**/*`.
+
+## Patch `src/engines/court.ts`
+
+### 1) Add this import near the other imports
+
+```ts
+import { applyV36StatisticalCourt } from "./v36/statCourt.js";
+```
+
+### 2) Replace the final return object
+
+Find the existing final return near the end of `analyzePair()`:
+
+```ts
+return {
+  symbol, display: meta.display,
+  quote, regime, mtf, correlation: corr, news, priceAction: pa, session,
+  scores, plan, risk,
+  verdict, opportunityStatus: oppStatus,
+  bullCase, bearCase, summary, verdictExplanation,
+  warnings,
+  indicators: { m5: indM5, m15: indM15, h1: indH1, h4: indH4, d1: indD1 },
+  marketStructure, killZone, manipulation,
+  structuralPlan,
+  divergenceH1, divergenceM15,
+  freshness,
+  ...({ vwap, m5Trigger, calendarFeedback: calFeedback } as any),
+  generatedUtc: new Date().toISOString(),
+};
+```
+
+Replace it with:
+
+```ts
+const baseAnalysis: PairAnalysis = {
+  symbol, display: meta.display,
+  quote, regime, mtf, correlation: corr, news, priceAction: pa, session,
+  scores, plan, risk,
+  verdict, opportunityStatus: oppStatus,
+  bullCase, bearCase, summary, verdictExplanation,
+  warnings,
+  indicators: { m5: indM5, m15: indM15, h1: indH1, h4: indH4, d1: indD1 },
+  marketStructure, killZone, manipulation,
+  structuralPlan,
+  divergenceH1, divergenceM15,
+  freshness,
+  ...({ vwap, m5Trigger, calendarFeedback: calFeedback } as any),
+  generatedUtc: new Date().toISOString(),
+};
+
+return applyV36StatisticalCourt(baseAnalysis, {
+  symbol,
+  quote,
+  series,
+});
+```
+
+## Why this is direct
+
+The old code already fetches:
+
+```ts
+const [quote, series, ctx, newsItems] = await Promise.all([
+  fetchQuote(symbol),
+  fetchAllTimeframes(symbol),
+  fetchContext(),
+  fetchNewsForPair(symbol),
+]);
+```
+
+So v3.6 receives the real values directly from the old fetchers.
+
+## Data honesty rules enforced
+
+The v3.6 truth gate blocks:
+
+- unavailable quote
+- invalid bid/ask
+- stale quote > 120s
+- missing 5m / 15m / 1h / 4h candles
+- malformed OHLC
+- non-monotonic timestamps
+- synthetic NZDUSD fallback
+- Investing PT5H pretending to be H4
+
+## Important note
+
+The old `fetchers/candles.ts` contains a synthetic NZDUSD fallback and an Investing PT5H H4 approximation. v3.6 does not modify that file in this patch; instead it blocks those sources at the truth gate.
+
+That means:
+- old v3.5.6 can still display its normal analysis
+- v3.6 can force WAIT when the data source violates the stricter truth contract
+
+
+===== src/tests/v36-stat-court-smoke.ts =====
+// ============================================================================
+// Trading Court Pro v3.6 — Smoke Test
+// This test uses only existing project types and deterministic local candles.
+// It is NOT a trading test. It verifies compile + no crash.
+// ============================================================================
+
+import type { Candle, CandleSeries, PairAnalysis, Quote } from "../types/index.js";
+import { applyV36StatisticalCourt } from "../engines/v36/statCourt.js";
+
+function candles(n: number, start = 1.1, step = 0.0001, interval = 3600): Candle[] {
+  const now = Math.floor(Date.now() / 1000);
+  let p = start;
+  const out: Candle[] = [];
+  for (let i = 0; i < n; i++) {
+    const o = p;
+    const c = p + step;
+    out.push({ t: now - (n - i) * interval, o, h: Math.max(o, c) + Math.abs(step), l: Math.min(o, c) - Math.abs(step), c });
+    p = c;
+  }
+  return out;
+}
+
+function series(tf: string, interval: number): CandleSeries {
+  return {
+    symbol: "EURUSD",
+    timeframe: tf,
+    candles: candles(160, 1.1, 0.0001, interval),
+    source: "smoke_real_shape",
+    available: true,
+  };
+}
+
+const quote: Quote = {
+  symbol: "EURUSD",
+  bid: 1.115,
+  ask: 1.1151,
+  mid: 1.11505,
+  spread: 1,
+  source: "smoke_real_shape",
+  ts: Date.now(),
+  available: true,
+};
+
+const analysis = {
+  symbol: "EURUSD",
+  display: "EUR/USD",
+  quote,
+  mtf: { direction: "LONG", alignment: 70 },
+  scores: { direction: "LONG", composite: 70, confidence: 82, confidenceTier: "STRONG", sizeMultiplier: 1 },
+  plan: { direction: "LONG", notes: [] },
+  verdict: "BUY",
+  warnings: [],
+  summary: "smoke",
+  verdictExplanation: { why: [], missing: [], nextSteps: [] },
+} as unknown as PairAnalysis;
+
+const out = applyV36StatisticalCourt(analysis, {
+  symbol: "EURUSD",
+  quote,
+  series: {
+    "5m": series("5m", 300),
+    "15m": series("15m", 900),
+    "1h": series("1h", 3600),
+    "4h": series("4h", 14400),
+  },
+});
+
+console.log(JSON.stringify({ verdict: out.verdict, confidence: out.scores.confidence, v36: (out as any).v36 != null }, null, 2));

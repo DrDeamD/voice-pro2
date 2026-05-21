@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "outDir": "dist"
+  },
+  "include": [
+    "src/config.ts",
+    "src/http.ts",
+    "src/types/**/*",
+    "src/engines/**/*",
+    "src/fetchers/**/*",
+    "src/backtest/**/*",
+    "src/calibration/**/*",
+    "src/tests/**/*"
+  ],
+  "exclude": [
+    "node_modules", "dist", "public",
+    "src/index.tsx", "src/renderer.tsx", "src/server.ts"
+  ]
+}

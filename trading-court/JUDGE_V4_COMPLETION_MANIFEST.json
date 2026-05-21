@@ -1,0 +1,18 @@
+{
+  "package": "trading_court_v37b_judge_override_FULL_V4_COMPLETED",
+  "base_uploaded": "trading_court_v37b_judge_override_full.zip",
+  "completed_on_existing_project": true,
+  "statCourt_applyJudgeOverride_detected_or_patched": true,
+  "files_added_or_replaced": [
+    "src/engines/judge/judgeEngineV4.ts",
+    "src/engines/v36/judgeOverride.ts",
+    "src/components/JudgeOverrideBox.tsx",
+    "src/tests/judgeEngineV4.smoke.ts",
+    "docs/JUDGE_ENGINE_V4.md"
+  ],
+  "risk_thresholds": {
+    "<40": "keep verdict + confidence adjustment",
+    "40-69": "WAIT_FOR_CONFIRMATION",
+    ">=70": "HARD_WAIT"
+  }
+}

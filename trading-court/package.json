@@ -1,0 +1,34 @@
+{
+  "name": "trading-court-pro",
+  "version": "4.6.0-phaseA-judge",
+  "description": "Trading Court Pro — multi-engine FX & Gold decision-support system with cross-pair support (v4.1 Phase 1)",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "preview": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "test": "tsx src/tests/v4.1-cross-eur-pairs.smoke.ts && tsx src/tests/v4.1-cross-16pairs.smoke.ts && tsx src/tests/v4.2-phase1.smoke.ts && tsx src/tests/v4.2-phase2.smoke.ts && tsx src/tests/v4.6-phaseA-judge-integration.smoke.ts",
+    "test:all": "tsx src/tests/v4.1-cross-eur-pairs.smoke.ts && tsx src/tests/judgeEngineV4.smoke.ts && tsx src/tests/judgeOverride.smoke.ts && tsx src/tests/v36-stat-court-smoke.ts && tsx src/tests/calibration.smoke.ts && tsx src/tests/v4-priority0e-verdict-schema.smoke.ts",
+    "test:single": "tsx",
+    "backtest": "tsx src/backtest/cli.ts",
+    "backtest:baseline": "tsx src/backtest/baseline-runner.ts",
+    "calibrate": "tsx src/calibration/cli.ts",
+    "tracker:run": "tsx src/cron/runOutcomeTracker.ts",
+    "tracker:build": "tsc && node dist/cron/runOutcomeTracker.js",
+    "lint:sources": "tsx src/tests/lint-dead-sources.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.7.0"
+  }
+}
