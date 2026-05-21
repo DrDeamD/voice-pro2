@@ -168,7 +168,8 @@ After v4.3 rebrand:
    swept level, note) in detail pane after Divergence. Hidden when kind=NONE.
 10. ✅ **KillZone card** (v4.6.11) — session-quality context (zone, 3-star quality,
     weight, veto, reasoning) in detail pane after Manipulation.
-11. **EOD gate notice** when "trade won't close same session".
+11. ✅ **EOD gate notice** (v4.6.12) — shows day-trading gate veto/warning + hours
+    to NY close in detail pane after KillZone. Hidden when neither vetoed nor warning.
 12. **Calendar feedback signals** (which past actuals are still moving the bias).
 13. **Market structure detail** (dealing range, premium %, last BOS/CHoCH age).
 

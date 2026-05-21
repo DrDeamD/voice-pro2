@@ -1196,6 +1196,19 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }
 
+    // ── v4.6.12 P2 #11 — EOD day-trading gate ──────────────────────────────
+    var eod = p.eodGate;
+    var eodHtml = '';
+    if (eod && (eod.vetoed || eod.warning)) {
+      var eodCol = eod.vetoed ? '#ef4444' : '#f59e0b';
+      var eodTxt = eod.reason || eod.warning || '';
+      var hc = (eod.hoursToClose != null && eod.hoursToClose > 0) ? ' · ' + eod.hoursToClose.toFixed(1) + 'س للإغلاق' : '';
+      eodHtml = '<div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid ' + eodCol + '40;margin-bottom:12px">'
+        + '<div class="sub-hdr" style="color:' + eodCol + '">⏳ بوابة الإغلاق اليومي' + hc + '</div>'
+        + '<p style="font-size:11px;color:#cbd5e1;line-height:1.5">' + esc(eodTxt) + '</p>'
+        + '</div>';
+    }
+
     const vCol = p.verdict === "BUY" ? "#10b981" : p.verdict === "SELL" ? "#ef4444" : "#64748b";
 
     body.innerHTML =
@@ -1261,6 +1274,7 @@ const INLINE_JS = `// ==========================================================
         divHtml +
         manipHtml +
         kzHtml +
+        eodHtml +
 
         // Legacy bull/bear cases (kept for compat)
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
