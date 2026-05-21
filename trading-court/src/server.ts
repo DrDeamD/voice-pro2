@@ -781,6 +781,15 @@ const INLINE_JS = `// ==========================================================
     var sess = data && data.currencyStrengthSessions;
     if (!intr && !sess) { host.innerHTML = ""; return; }
 
+    // v4.6.22 — court verdict per symbol, to flag when "strongest pair" agrees.
+    var verdictMap = {};
+    if (data && data.pairs) {
+      for (var vi = 0; vi < data.pairs.length; vi++) {
+        var pp = data.pairs[vi];
+        if (pp && pp.symbol) verdictMap[pp.symbol] = pp.verdict;
+      }
+    }
+
     function rankTable(title, rep) {
       if (!rep || !rep.byCurrency) {
         return tableShell(title, '<p style="font-size:10px;color:#475569;padding:6px">—</p>');
@@ -809,9 +818,22 @@ const INLINE_JS = `// ==========================================================
       var col = bp.direction === 'BUY' ? '#10b981' : '#ef4444';
       var label = (bp.symbol || '').slice(0,3) + '/' + (bp.symbol || '').slice(3);
       var arEn = bp.direction === 'BUY' ? 'شراء' : 'بيع';
-      return '<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:space-between">'
-        + '<span style="font-size:9px;color:#64748b">أقوى زوج</span>'
-        + '<span style="font-size:10.5px;font-weight:700;color:' + col + ';font-family:monospace">' + arEn + ' ' + esc(label) + ' <span style="color:#64748b;font-weight:400">(فرق ' + Math.abs(Math.round(bp.spread)) + ')</span></span>'
+      // v4.6.22 — agreement with the court's final verdict for this symbol.
+      var v = verdictMap[bp.symbol];
+      var badge;
+      if (v === bp.direction) {
+        badge = '<span style="font-size:8.5px;color:#0a0e1a;background:#10b981;border-radius:3px;padding:1px 4px;font-weight:700">✓ يوافق الحكم</span>';
+      } else if (v === 'BUY' || v === 'SELL') {
+        badge = '<span style="font-size:8.5px;color:#f59e0b;border:1px solid #f59e0b60;border-radius:3px;padding:1px 4px">⚠ يخالف الحكم</span>';
+      } else {
+        badge = '<span style="font-size:8.5px;color:#64748b;border:1px solid #33415560;border-radius:3px;padding:1px 4px">الحكم: انتظار</span>';
+      }
+      return '<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(245,158,11,0.2)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between">'
+          + '<span style="font-size:9px;color:#64748b">أقوى زوج</span>'
+          + '<span style="font-size:10.5px;font-weight:700;color:' + col + ';font-family:monospace">' + arEn + ' ' + esc(label) + ' <span style="color:#64748b;font-weight:400">(فرق ' + Math.abs(Math.round(bp.spread)) + ')</span></span>'
+        + '</div>'
+        + '<div style="text-align:left;margin-top:3px">' + badge + '</div>'
         + '</div>';
     }
     function tableShell(title, inner) {
