@@ -1,13 +1,16 @@
 // ============================================================================
 // Momentum Engine — EMA stack + RSI + ADX amplification on M15/H1/H4
+//
+// v4.6.24 — INTRADAY rebalance: fast frames lead. Was H4×0.45 (heaviest),
+// M15×0.20 (lightest) — inverted for a minutes-to-hours system. Now M15 leads.
 // ============================================================================
 import type { IndicatorBlock } from "../types/index.js";
 
 export function momentumScore(m15: IndicatorBlock, h1: IndicatorBlock, h4: IndicatorBlock): number {
   const parts: { blk: IndicatorBlock; weight: number }[] = [
-    { blk: h4,  weight: 0.45 },
+    { blk: m15, weight: 0.45 },
     { blk: h1,  weight: 0.35 },
-    { blk: m15, weight: 0.20 },
+    { blk: h4,  weight: 0.20 },
   ];
 
   let total = 0;

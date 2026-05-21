@@ -98,10 +98,22 @@ export interface CourtInput {
 // ─── Strongly-typed weight resolver ────────────────────────────────────────
 type WeightMap = Record<string, number>;
 
+// v4.6.24 — normalise so the merged map always sums to 1.0. Makes the composite
+// a true weighted average regardless of the raw numbers, and removes the class
+// of bug where a dynamic profile silently summed to ≠1.0 (e.g. breakingNews 0.95).
+function normalizeWeights(w: WeightMap): WeightMap {
+  let sum = 0;
+  for (const k of Object.keys(w)) sum += Number.isFinite(w[k]) ? w[k] : 0;
+  if (sum <= 0) return w;
+  const out: WeightMap = {};
+  for (const k of Object.keys(w)) out[k] = w[k] / sum;
+  return out;
+}
+
 function resolveWeights(highImpactActive: boolean, breakingActive: boolean): WeightMap {
-  if (breakingActive) return { ...WEIGHTS, ...DYNAMIC_WEIGHTS.breakingNews } as WeightMap;
-  if (highImpactActive) return { ...WEIGHTS, ...DYNAMIC_WEIGHTS.highImpactNews } as WeightMap;
-  return { ...WEIGHTS } as WeightMap;
+  if (breakingActive) return normalizeWeights({ ...WEIGHTS, ...DYNAMIC_WEIGHTS.breakingNews } as WeightMap);
+  if (highImpactActive) return normalizeWeights({ ...WEIGHTS, ...DYNAMIC_WEIGHTS.highImpactNews } as WeightMap);
+  return normalizeWeights({ ...WEIGHTS } as WeightMap);
 }
 
 function w(W: WeightMap, key: string): number {
@@ -206,11 +218,11 @@ function opportunityStatus(verdict: Verdict, confidence: number, reasons: string
 
 function buildCases(scores: EngineScores, regime: any, mtf: any, corr: any, news: any, pa: any, _session: any, vwap: any, m5t: any): [string[], string[]] {
   const bull: string[] = [], bear: string[] = [];
-  if (mtf.alignment > 0) bull.push(`MTF alignment ${fmtSigned(mtf.alignment)} (M15 ${mtf.m15Dir}×2, H1 ${mtf.h1Dir}×3, H4 ${mtf.h4Dir}×3, D1 ${mtf.d1Dir}×2)`);
-  else if (mtf.alignment < 0) bear.push(`MTF alignment ${fmtSigned(mtf.alignment)} (M15 ${mtf.m15Dir}×2, H1 ${mtf.h1Dir}×3, H4 ${mtf.h4Dir}×3, D1 ${mtf.d1Dir}×2)`);
+  if (mtf.alignment > 0) bull.push(`MTF alignment ${fmtSigned(mtf.alignment)} (M15 ${mtf.m15Dir}×3, H1 ${mtf.h1Dir}×3, H4 ${mtf.h4Dir}×2, D1 ${mtf.d1Dir}×1)`);
+  else if (mtf.alignment < 0) bear.push(`MTF alignment ${fmtSigned(mtf.alignment)} (M15 ${mtf.m15Dir}×3, H1 ${mtf.h1Dir}×3, H4 ${mtf.h4Dir}×2, D1 ${mtf.d1Dir}×1)`);
 
-  if (regime.label === "TREND_UP") bull.push(`H4 regime TREND_UP, ADX ${regime.adx?.toFixed(1)} (score ${(scores as any).regime?.toFixed(0)})`);
-  else if (regime.label === "TREND_DOWN") bear.push(`H4 regime TREND_DOWN, ADX ${regime.adx?.toFixed(1)} (score ${(scores as any).regime?.toFixed(0)})`);
+  if (regime.label === "TREND_UP") bull.push(`H1 regime TREND_UP, ADX ${regime.adx?.toFixed(1)} (score ${(scores as any).regime?.toFixed(0)})`);
+  else if (regime.label === "TREND_DOWN") bear.push(`H1 regime TREND_DOWN, ADX ${regime.adx?.toFixed(1)} (score ${(scores as any).regime?.toFixed(0)})`);
   else { bull.push(`Regime = ${regime.label}`); bear.push(`Regime = ${regime.label}`); }
 
   if (scores.momentum > 20) bull.push(`Momentum ${fmtSigned(scores.momentum)}`);
@@ -259,7 +271,7 @@ function buildVerdictExplanation(symbol: string, verdict: Verdict, scores: Engin
   if (verdict === "BUY" || verdict === "SELL") {
     const headline = `Court rules ${verdict} on ${meta.display} (${plan.tier})`;
     why.push(`Composite ${fmtSigned(scores.composite)}, confidence ${scores.confidence.toFixed(0)} (${scores.confidenceTier})`);
-    why.push(`H4 regime ${regime.label}, ADX ${regime.adx?.toFixed(1) ?? "n/a"}; MTF ${fmtSigned(mtf.alignment)}`);
+    why.push(`H1 regime ${regime.label}, ADX ${regime.adx?.toFixed(1) ?? "n/a"}; MTF ${fmtSigned(mtf.alignment)}`);
     why.push(`RR ${plan.rr1?.toFixed(2)} ≥ floor ${rrFloor.toFixed(2)}; grade ${plan.tier}`);
     why.push("Risk gate passed");
     return { headline, why, missing, nextSteps };
@@ -295,7 +307,7 @@ function buildVerdictExplanation(symbol: string, verdict: Verdict, scores: Engin
       missing.push("Economic calendar has HIGH-impact event in window");
       nextSteps.push(`Wait ${RULES.calendarBlockMinutes}min after the event`);
     } else if (rl.includes("against")) {
-      missing.push("Direction fights H4 trend regime");
+      missing.push("Direction fights H1 trend regime");
       nextSteps.push("Wait for regime flip or stronger counter-trend confirmation");
     } else if (rl.includes("atr")) {
       missing.push("ATR unavailable – cannot size risk");
@@ -351,7 +363,7 @@ export function runCourt(input: CourtInput): PairAnalysis {
   // labeling, easier baseline filtering. See regime.ts for full rationale.
   const regime = isInClosureWindow(symbol, now)
     ? makeMarketClosedRegime(indH4)
-    : classifyRegime(indH4);
+    : classifyRegime(indH1); // v4.6.24 — H1 regime (was H4): responsive enough for intraday; H4 lags hours
   const mtf = analyzeMTF(indM15, indH1, indH4, indD1);
   const corr = analyzeCorrelation(symbol, ctx);
 
@@ -482,7 +494,7 @@ export function runCourt(input: CourtInput): PairAnalysis {
       marketStructure.swingsH4,
       marketStructure.orderBlocks,
       marketStructure.liquidityPools,
-      indH4.atr14 ?? indH1.atr14,
+      indM15.atr14 ?? indH1.atr14 ?? indH4.atr14, // v4.6.24 — M15-first ATR so structural stops are intraday-sized, matching the risk gate
       marketStructure.premiumDiscount.rangeHigh,
       marketStructure.premiumDiscount.rangeLow,
     );

@@ -41,6 +41,15 @@ export function evaluateRisk(
     reasons.push(`RR ${rr == null ? "n/a" : rr.toFixed(2)} below minimum ${rrFloor.toFixed(2)}`);
   }
 
+  // v4.6.24 — intraday stop-distance cap. A same-day trade should not carry a
+  // swing-sized stop; before this nothing rejected a 100+ pip stop as long as
+  // RR passed. Limits: XAU 120p, JPY-quoted pairs 60p, other FX majors 50p.
+  const maxIntradayStop = base === "XAU" ? 120 : (quote === "JPY" ? 60 : 50);
+  if (plan.stopDistancePips != null && plan.stopDistancePips > maxIntradayStop) {
+    passed = false;
+    reasons.push(`Stop ${plan.stopDistancePips.toFixed(0)}p exceeds intraday cap ${maxIntradayStop}p – swing-sized, stand down`);
+  }
+
   if (regime.label === "DEAD" || regime.label === "UNKNOWN") {
     passed = false;
     reasons.push(`Regime ${regime.label} – no tradable structure`);

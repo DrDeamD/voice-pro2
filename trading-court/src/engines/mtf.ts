@@ -40,19 +40,21 @@ export function analyzeMTF(m15: IndicatorBlock, h1: IndicatorBlock, h4: Indicato
   const [h4d, h4w] = tfDirection(h4);
   const [d1d, d1w] = tfDirection(d1);
 
-  // M15×2, H1×3, H4×3, D1×2 → Total weight = 10
-  const vote = signed(m15d) * 2 + signed(h1d) * 3 + signed(h4d) * 3 + signed(d1d) * 2;
-  const score = (vote / 10) * 100;
+  // v4.6.24 — INTRADAY: M15×3, H1×3, H4×2, D1×1 → Total 9. Fast frames (M15+H1
+  // = 67%) lead; H4 is context, D1 a light filter. Was M15×2,H1×3,H4×3,D1×2
+  // where slow frames (H4+D1) still held 50% of the vote.
+  const vote = signed(m15d) * 3 + signed(h1d) * 3 + signed(h4d) * 2 + signed(d1d) * 1;
+  const score = (vote / 9) * 100;
 
   let direction: Direction = "FLAT";
   if (score >= 35) direction = "LONG";
   else if (score <= -35) direction = "SHORT";
 
   const reasoning = [
-    `M15 ${m15d} (${m15w}) ×2`,
+    `M15 ${m15d} (${m15w}) ×3`,
     `H1 ${h1d} (${h1w}) ×3`,
-    `H4 ${h4d} (${h4w}) ×3`,
-    `D1 ${d1d} (${d1w}) ×2`,
+    `H4 ${h4d} (${h4w}) ×2`,
+    `D1 ${d1d} (${d1w}) ×1`,
     `Weighted vote ${vote}/10 → ${score.toFixed(0)}`,
   ].join("; ");
 

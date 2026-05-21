@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.23-divergence-nearest-pivot";
+export const VERSION = "4.6.24-intraday-retune";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {
@@ -260,11 +260,14 @@ export const IND = {
   minBars: 210,
 };
 
-// ─── Engine weights (must sum ~1.0) ─────────────────────────────────────────
+// ─── Engine weights (normalised at runtime by resolveWeights) ───────────────
+// v4.6.24 — INTRADAY rebalance: marketStructure (built on slow H4 swings) cut
+// 0.22→0.16; the fast frames mtf 0.17→0.20 and momentum 0.13→0.15 take the
+// slack so a minutes-to-hours system leans on M15/H1, not H4 structure.
 export const WEIGHTS = {
-  marketStructure: 0.22,
-  mtf:             0.17,
-  momentum:        0.13,
+  marketStructure: 0.16,
+  mtf:             0.20,
+  momentum:        0.15,
   vwap:            0.07,
   priceAction:     0.09,
   manipulation:    0.08,
