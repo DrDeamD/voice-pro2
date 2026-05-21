@@ -78,11 +78,30 @@ function parseRss(xml: string): Array<{ title: string; link: string; desc: strin
   return out;
 }
 
+// v4.6.15 — LiveSquawk /latest-news specific parser. Their markup uses
+// SINGLE-quoted class attributes (class='latest__news__each ...'), which the
+// generic double-quote regex never matched — the root cause of "0 LiveSquawk
+// items". Structure:
+//   <div class='latest__news__each ...'>
+//     <div class='latest_news_each_title'>HEADLINE</div>
+//     <div class='latest_news__each__body'><p>detail</p></div>
+function parseLiveSquawkLatest(html: string): Array<{ title: string; link: string; desc: string; pub: Date | null }> {
+  const out: Array<{ title: string; link: string; desc: string; pub: Date | null }> = [];
+  const titleRe = /<div\s+class=['"]latest_news_each_title['"]>([\s\S]*?)<\/div>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = titleRe.exec(html)) !== null && out.length < 30) {
+    const title = decodeHtml(m[1]);
+    if (!title || title.length < 6) continue;
+    const after = html.slice(m.index, m.index + 1500);
+    const bodyM = after.match(/<div\s+class=['"]latest_news__each__body['"]>([\s\S]*?)<\/div>/i);
+    const desc = bodyM ? decodeHtml(bodyM[1]) : "";
+    out.push({ title, link: "", desc, pub: null });
+  }
+  return out;
+}
+
 function parseHtmlNewsBlocks(html: string): Array<{ title: string; link: string; desc: string; pub: Date | null }> {
   const out: Array<{ title: string; link: string; desc: string; pub: Date | null }> = [];
-  // Strategy 1: <article> ... </article>
-  // Strategy 2: <div class=*news*> ... </div>
-  // Strategy 3: <li class=*news*> ... </li>
   const patterns = [
     /<article\b[^>]*>([\s\S]*?)<\/article>/gi,
     /<div\b[^>]*class="[^"]*(?:news|squawk|headline|timeline-item)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
@@ -143,6 +162,7 @@ function buildLiveSquawkItem(
     highImpact: false,
     breaking: false,
     category: "GENERAL",
+    description: raw.desc,   // v4.6.15 — keep body for keyword match + display
   } as NewsItem;
 }
 
@@ -156,12 +176,20 @@ export async function fetchLiveSquawkSmart(): Promise<NewsItem[]> {
         timeoutMs: 5000,
         retries: 0,
         headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
           "Accept": "application/rss+xml, application/xml, text/html, */*",
           "Accept-Language": "en-US,en;q=0.9",
         },
       });
       if (!text) continue;
-      const items = isRssLike(text) ? parseRss(text) : parseHtmlNewsBlocks(text);
+      // RSS first; otherwise try the LiveSquawk-specific parser, then generic.
+      let items: Array<{ title: string; link: string; desc: string; pub: Date | null }>;
+      if (isRssLike(text)) {
+        items = parseRss(text);
+      } else {
+        items = parseLiveSquawkLatest(text);
+        if (items.length === 0) items = parseHtmlNewsBlocks(text);
+      }
       if (items.length === 0) continue;
       return items.map(buildLiveSquawkItem);
     } catch { /* try next */ }

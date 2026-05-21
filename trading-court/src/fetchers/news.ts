@@ -342,7 +342,7 @@ async function fetchLiveSquawk(): Promise<NewsItem[]> {
   // get proper category/highImpact/breaking flags and currency keyword
   // matches.
   const raw = await fetchLiveSquawkSmart();
-  return raw.map(it => buildItem(it.title, it.url, "", it.publishedUtc ? new Date(it.publishedUtc) : null, "LiveSquawk"));
+  return raw.map(it => buildItem(it.title, it.url, (it as any).description ?? "", it.publishedUtc ? new Date(it.publishedUtc) : null, "LiveSquawk"));
 }
 
 // ─── Filter generic items by pair currencies ────────────────────────────────
