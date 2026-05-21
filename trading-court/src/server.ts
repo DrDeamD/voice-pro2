@@ -676,7 +676,7 @@ const INLINE_JS = `// ==========================================================
         + '</div>';
     }).join('');
     host.innerHTML = '<div style="padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-bottom:1px solid #1e2d3d;background:#0a0e1a">'
-      + '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-inline-end:8px">قوة العملات</span>'
+      + '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-inline-end:8px">قوة العملات (intraday ~8س · متوسّط/زوج)</span>'
       + bars
       + '</div>';
   }

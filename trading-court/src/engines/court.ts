@@ -378,6 +378,19 @@ export function runCourt(input: CourtInput): PairAnalysis {
   const currentPrice = quote.available ? quote.mid : (indH4.lastClose ?? 0);
   const vwap = computeVwap(series["5m"]?.candles ?? [], currentPrice);
 
+  // v4.6.19 — intraday change for the currency-strength meter: current price vs
+  // the H1 close ~8 hours ago. The old meter used the DAILY change (vs prior-day
+  // close), which is useless mid-session. Falls back to the oldest H1 bar.
+  const h1Candles = series["1h"]?.candles ?? [];
+  let intradayChangePct: number | null = null;
+  if (h1Candles.length >= 2 && currentPrice > 0) {
+    const lookback = Math.min(8, h1Candles.length - 1);
+    const ref = h1Candles[h1Candles.length - 1 - lookback]?.c;
+    if (typeof ref === "number" && Number.isFinite(ref) && ref > 0) {
+      intradayChangePct = ((currentPrice - ref) / ref) * 100;
+    }
+  }
+
   // v4.2 Phase 1 — analytical engines (no veto, no scoring contribution; pure
   // information that the judge + arg-cards layer can use). All resolved here
   // so they're available downstream.
@@ -627,6 +640,7 @@ export function runCourt(input: CourtInput): PairAnalysis {
           fibonacci, pivotPoints, orb,
           preNewsWarning, speechReport, gpr,
           volumeProfile,
+          intradayChangePct,
           } as any),
     generatedUtc: now.toISOString(),
   };

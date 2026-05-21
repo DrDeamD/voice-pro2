@@ -43,7 +43,13 @@ export interface CurrencyStrengthReport {
 }
 
 function extractChangePct(p: PairAnalysis): number | null {
-  // 1) Direct from quote (TradingView populates this; Swissquote often does not)
+  // 0) v4.6.19 — intraday window (H1 ~8h) attached by runCourt. Preferred for an
+  // INTRADAY strength meter; reflects the current session's move, not the full
+  // prior-day change which made the meter useless past the open.
+  const intraday = (p as any).intradayChangePct;
+  if (typeof intraday === "number" && Number.isFinite(intraday)) return intraday;
+
+  // 1) Direct from quote (daily change — fallback only)
   const qchg = p.quote?.changePct;
   if (typeof qchg === "number" && Number.isFinite(qchg)) return qchg;
 
@@ -87,15 +93,22 @@ export function computeCurrencyStrength(
     byCurrency[quote].contributingPairs++;
   }
 
-  // Normalise scores to a [-100, +100] range based on max absolute raw sum.
-  let maxAbs = 0;
+  // v4.6.19 — score by the AVERAGE change per contributing pair, then normalise.
+  // Summing (the old way) structurally amplified currencies that appear in MANY
+  // pairs (EUR in 6, USD in 7) and muted ones in few (GBP/CHF/CAD in 2), so the
+  // extremes were a pair-count artefact, not real relative strength.
+  const avgByCcy: Record<string, number> = {};
   for (const k of Object.keys(byCurrency)) {
-    if (Math.abs(byCurrency[k].rawSum) > maxAbs) maxAbs = Math.abs(byCurrency[k].rawSum);
+    const e = byCurrency[k];
+    avgByCcy[k] = e.contributingPairs > 0 ? e.rawSum / e.contributingPairs : 0;
+  }
+  let maxAbs = 0;
+  for (const k of Object.keys(avgByCcy)) {
+    if (Math.abs(avgByCcy[k]) > maxAbs) maxAbs = Math.abs(avgByCcy[k]);
   }
   for (const k of Object.keys(byCurrency)) {
-    const entry = byCurrency[k];
-    entry.score = maxAbs > 0
-      ? Math.round((entry.rawSum / maxAbs) * 100)
+    byCurrency[k].score = maxAbs > 0
+      ? Math.round((avgByCcy[k] / maxAbs) * 100)
       : 0;
   }
 

@@ -3,7 +3,7 @@
 // ============================================================================
 import type { InstrumentMeta } from "./types/index.js";
 
-export const VERSION = "4.6.18-confidence-session-fix";
+export const VERSION = "4.6.19-intraday-strength";
 
 export const INSTRUMENTS: Record<string, InstrumentMeta> = {
   EURUSD: {
