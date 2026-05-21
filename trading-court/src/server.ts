@@ -17,7 +17,7 @@ import { fetchCalendar } from "./fetchers/calendar.js";
 import { fetchBreakingNews } from "./fetchers/news.js";
 import { sourceHealth } from "./http.js";
 // v4.2 Phase 2 — snapshot-level engines
-import { computeCurrencyStrength } from "./engines/currencyStrength.js";
+import { computeCurrencyStrength, computeCurrencyStrengthWith } from "./engines/currencyStrength.js";
 import { fetchGPR } from "./fetchers/gpr.js";
 // v4.5 — Phase 3 (without Telegram): correlation + change log
 import { computePairCorrelations } from "./engines/pairCorrelation.js";
@@ -94,6 +94,14 @@ async function getSnapshot(force = false): Promise<Snapshot & { breakingNews?: N
   // v4.2 Phase 2 — currency strength meter computed across all pairs
   const currencyStrength = computeCurrencyStrength(pairs as any);
 
+  // v4.6.20 — three per-session strength-ranking tables (change since each
+  // session's UTC open), alongside the default intraday (~8h) meter above.
+  const currencyStrengthSessions = {
+    asia:   computeCurrencyStrengthWith(pairs as any, (p: any) => (p.sessionChanges ? p.sessionChanges.asia : null)),
+    london: computeCurrencyStrengthWith(pairs as any, (p: any) => (p.sessionChanges ? p.sessionChanges.london : null)),
+    ny:     computeCurrencyStrengthWith(pairs as any, (p: any) => (p.sessionChanges ? p.sessionChanges.ny : null)),
+  };
+
   // v4.6.5 P1 — global CB Hawk/Dove stance, aggregated from every pair's
   // speechReport.byCurrency. The same speech appears in multiple pairs (ECB
   // news lands on all EUR pairs), so we dedup by title before summing impact.
@@ -139,6 +147,7 @@ async function getSnapshot(force = false): Promise<Snapshot & { breakingNews?: N
     dataSourceHealth,
     breakingNews,
     currencyStrength,              // v4.2 Phase 2
+    currencyStrengthSessions,      // v4.6.20 — per-session ranking tables
     currencyStance,                // v4.6.5 P1 — CB Hawk/Dove stance
     gpr,                           // v4.2 Phase 2
     pairCorrelation,               // v4.5 Phase 3
@@ -760,6 +769,54 @@ const INLINE_JS = `// ==========================================================
     }
     html += '</table></div>';
     host.innerHTML = '<p style="font-size:10.5px;color:#64748b;padding:4px 8px">أخضر = ارتباط موجب · أحمر = سالب · الأرقام ρ×100 · |ρ|≥70 = تعرّض مزدوج محتمل (آخر ' + (pc.lookback || '?') + ' شمعة M15)</p>' + html;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // renderStrengthTables() — v4.6.20 — 4 ranking tables: intraday(8h) + 3 sessions
+  // ════════════════════════════════════════════════════════════════════════
+  function renderStrengthTables(data) {
+    var host = document.getElementById("strength-tables-host");
+    if (!host) return;
+    var intr = data && data.currencyStrength;
+    var sess = data && data.currencyStrengthSessions;
+    if (!intr && !sess) { host.innerHTML = ""; return; }
+
+    function rankTable(title, rep) {
+      if (!rep || !rep.byCurrency) {
+        return tableShell(title, '<p style="font-size:10px;color:#475569;padding:6px">—</p>');
+      }
+      var entries = Object.keys(rep.byCurrency).map(function(k){ return rep.byCurrency[k]; })
+        .filter(function(e){ return e && e.contributingPairs > 0; });
+      if (entries.length === 0) {
+        return tableShell(title, '<p style="font-size:10px;color:#475569;padding:6px">لم تُفتح بعد</p>');
+      }
+      entries.sort(function(a,b){ return b.score - a.score; });
+      var rows = entries.map(function(e, i){
+        var col = e.score > 4 ? '#10b981' : e.score < -4 ? '#ef4444' : '#94a3b8';
+        var w = Math.min(100, Math.abs(e.score));
+        return '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(30,45,61,0.4)">'
+          + '<span style="font-size:9px;color:#475569;width:14px">' + (i+1) + '</span>'
+          + '<span style="font-size:11px;font-weight:600;color:#e2e8f0;width:38px;font-family:monospace">' + esc(e.currency) + '</span>'
+          + '<div style="flex:1;height:4px;background:#1f2937;border-radius:2px;overflow:hidden"><div style="width:' + w + '%;height:100%;background:' + col + '"></div></div>'
+          + '<span style="font-size:10px;font-weight:600;color:' + col + ';width:34px;text-align:left;font-family:monospace">' + (e.score>=0?'+':'') + e.score + '</span>'
+          + '</div>';
+      }).join('');
+      return tableShell(title, rows);
+    }
+    function tableShell(title, inner) {
+      return '<div style="background:#0f172a;border-radius:8px;padding:8px 10px;border:1px solid #1e2d3d">'
+        + '<div style="font-size:10px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">' + title + '</div>'
+        + inner + '</div>';
+    }
+
+    host.innerHTML = '<div style="padding:8px 16px;border-bottom:1px solid #1e2d3d;background:#0a0e1a">'
+      + '<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">ترتيب قوة العملات حسب الجلسة (تغيّر منذ الافتتاح UTC)</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+        + rankTable('intraday ~8س', intr)
+        + rankTable('آسيا (00:00)', sess && sess.asia)
+        + rankTable('لندن (07:00)', sess && sess.london)
+        + rankTable('أمريكا (13:00)', sess && sess.ny)
+      + '</div></div>';
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -1580,6 +1637,7 @@ const INLINE_JS = `// ==========================================================
       renderSources(data);
       renderGPR(data);
       renderCurrencyStrength(data);
+      renderStrengthTables(data);
       renderCBStance(data);
       renderVerdictChanges(data);
       renderBreakingBanner(data);
@@ -1778,6 +1836,7 @@ ${INLINE_CSS}
 <div id="source-bar" class="src-bar"></div>
 <div id="gpr-host"></div>
 <div id="strength-host"></div>
+<div id="strength-tables-host"></div>
 <div id="cbstance-host"></div>
 <div id="changes-host"></div>
 <div id="breaking-host"></div>

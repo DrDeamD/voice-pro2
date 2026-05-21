@@ -73,14 +73,24 @@ function extractChangePct(p: PairAnalysis): number | null {
 export function computeCurrencyStrength(
   pairs: PairAnalysis[],
 ): CurrencyStrengthReport {
+  return computeCurrencyStrengthWith(pairs, extractChangePct);
+}
+
+// v4.6.20 — parameterised core so the same averaging+normalisation logic powers
+// both the default intraday meter and the per-session ranking tables (each just
+// supplies a different change extractor).
+export function computeCurrencyStrengthWith(
+  pairs: PairAnalysis[],
+  extractor: (p: PairAnalysis) => number | null,
+): CurrencyStrengthReport {
   const byCurrency: Record<string, CurrencyStrengthEntry> = {};
   let pairsUsed = 0;
 
   for (const p of pairs) {
     const meta = INSTRUMENTS[p.symbol];
     if (!meta) continue;
-    const chg = extractChangePct(p);
-    if (chg == null) continue;
+    const chg = extractor(p);
+    if (chg == null || !Number.isFinite(chg)) continue;
     pairsUsed++;
 
     // For "EURUSD up 0.5%" → EUR +0.5, USD -0.5

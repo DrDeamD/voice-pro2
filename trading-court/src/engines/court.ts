@@ -391,6 +391,16 @@ export function runCourt(input: CourtInput): PairAnalysis {
     }
   }
 
+  // v4.6.20 — per-session change (since each session's UTC open) for the
+  // session strength-ranking tables. null when the session hasn't opened yet
+  // today or H1 history doesn't reach the open. Asia 00:00, London 07:00,
+  // New York 13:00 UTC.
+  const sessionChanges = {
+    asia:   changeSinceUtcHour(h1Candles, currentPrice, 0,  now),
+    london: changeSinceUtcHour(h1Candles, currentPrice, 7,  now),
+    ny:     changeSinceUtcHour(h1Candles, currentPrice, 13, now),
+  };
+
   // v4.2 Phase 1 — analytical engines (no veto, no scoring contribution; pure
   // information that the judge + arg-cards layer can use). All resolved here
   // so they're available downstream.
@@ -641,6 +651,7 @@ export function runCourt(input: CourtInput): PairAnalysis {
           preNewsWarning, speechReport, gpr,
           volumeProfile,
           intradayChangePct,
+          sessionChanges,
           } as any),
     generatedUtc: now.toISOString(),
   };
@@ -692,3 +703,15 @@ function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, 
 function round(v: number, d = 1): number { const m = Math.pow(10, d); return Math.round(v * m) / m; }
 function round3(v: number): number { return Math.round(v * 1000) / 1000; }
 function fmtSigned(v: number): string { return (v >= 0 ? "+" : "") + v.toFixed(1); }
+
+// v4.6.20 — % change from a session's UTC open (today) to the current price,
+// using the open of the first H1 candle at/after the session-open hour. Returns
+// null when the session hasn't opened yet today or H1 history doesn't reach it.
+function changeSinceUtcHour(h1: any[], price: number, openHour: number, now: Date): number | null {
+  if (!(price > 0) || !Array.isArray(h1) || h1.length === 0) return null;
+  const openTs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), openHour) / 1000;
+  if (now.getTime() / 1000 < openTs) return null; // session not open yet today
+  const ref = h1.find(c => c && typeof c.t === "number" && c.t >= openTs);
+  if (!ref || !(ref.o > 0)) return null;
+  return ((price - ref.o) / ref.o) * 100;
+}
