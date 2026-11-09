@@ -90,7 +90,7 @@ def mini(layers, lines=(), marks=(), fold_top=None, k=0.22, caption=""):
 
 PLANFORM = {  # schematic top view: span, leading-edge drop, root chord (mm)
     "daybreak": (118, 46, 110), "unite": (115, 50, 105), "haotian": (180, 78, 140),
-    "trio": (180, 64, 140), "nasma": (127, 53, 98),
+    "trio": (180, 64, 140), "nasma": (127, 53, 98), "qimma": (120, 50, 105),
 }
 
 
@@ -148,26 +148,29 @@ def geo_fold_up(p):
 
 def geo_unite(p):
     W, H, cx = 148.0, 210.0, 74.0
+    fy, roll = p.get("fold_y", 122), p.get("roll", 33)   # first fold height, roll start mark
     tl = [((cx, 0), (cx, H), "center", 1, (cx, 20))]
     for sx in (-1, 1):
         tl.append(((cx + sx * 5, H), (cx + sx * cx, H - 69), "valley", 2, (cx + sx * 45, H - 40)))
-    tl.append(((0, 122), (W, 122), "valley", 3, (W * 0.12, 122)))
+    tl.append(((0, fy), (W, fy), "valley", 3, (W * 0.12, fy)))
     for sx in (-1, 1):
-        tl.append(((cx - sx * 6, 122), (cx + sx * cx, 42), "approx", 4, (cx + sx * 50, 66)))
-    marks = [(cx, 116), (33, 122), (W - 33, 122)]
-    notes = [(cx, 126, "12.2 سم من الأسفل"), (cx + 26, 113, "علامة 0.6 سم تحت الحافة"),
-             (cx, 10, "④ = تقديري من الفيديو"), (cx, 135, "علامتا 3.3 سم: بداية خط اللفّ ⑤")]
+        tl.append(((cx - sx * 6, fy), (cx + sx * cx, fy - 80), "approx", 4, (cx + sx * 50, fy - 56)))
+    marks = [(cx, fy - 6), (roll, fy), (W - roll, fy)]
+    notes = [(cx, fy + 4, f"{fy / 10:g} سم من الأسفل"), (cx + 26, fy - 9, "علامة 0.6 سم تحت الحافة"),
+             (cx, 26, "④ = تقديري من الفيديو"), (cx, fy + 13, f"علامتا {roll / 10:g} سم: بداية خط اللفّ ⑤")]
     sheet = [[(0, 0), (W, 0), (W, H), (0, H)]]
     s1 = sheet
     for sx in (-1, 1):
         s1 = fold(s1, (cx + sx * 5, H), (cx + sx * cx, H - 69), (cx + sx * cx, H))
-    s2 = fold(s1, (0, 122), (W, 122), (cx, H))
+    s2 = fold(s1, (0, fy), (W, fy), (cx, H))
     s3 = s2
     for sx in (-1, 1):
-        s3 = fold(s3, (cx - sx * 6, 122), (cx + sx * cx, 42), (cx + sx * cx, 122))
-    figs = [mini(sheet, [(l[0], l[1], l[2]) for l in tl[:4]], caption="①② الزاويتان، فراغ 0.5 + 0.5 سم. ③ خط 12.2 سم."),
-            mini(s1, [((0, 122), (W, 122), "valley")], caption="بعد ②. اطوِ الأعلى للأسفل على ③."),
-            mini(s2, [(l[0], l[1], l[2]) for l in tl[4:6]], [(cx, 116)], caption="④ الزاويتان نحو المنتصف (تقديري)."),
+        s3 = fold(s3, (cx - sx * 6, fy), (cx + sx * cx, fy - 80), (cx + sx * cx, fy))
+    figs = [mini(sheet, [(l[0], l[1], l[2]) for l in tl[:4]],
+                 caption=f"①② الزاويتان، فراغ 0.5 + 0.5 سم. ③ خط {fy / 10:g} سم."),
+            mini(s1, [((0, fy), (W, fy), "valley")], caption="بعد ②. اطوِ الأعلى للأسفل على ③."),
+            mini(s2, [(l[0], l[1], l[2]) for l in tl[4:6]], [(cx, fy - 6), (roll, fy), (W - roll, fy)],
+                 caption=f"④ الزاويتان نحو المنتصف (تقديري). علامتا اللفّ {roll / 10:g} سم."),
             mini(s3, [], caption="بعد ④. ثم اللفّ والقفل: انظر الخطوات.")]
     return tl, marks, notes, figs, []
 
@@ -246,6 +249,10 @@ def page_steps(p, figs, idx, total_note):
     steps = "".join((f'<li><b class="t">{t}</b> {s}</li>' if video else f'<li>{s}</li>')
                     for t, s in p["steps"] if t)
     feats = "".join(f"<li>{f}</li>" for f in p["features"])
+    extra = ""
+    for title, rows in p.get("tables", []):
+        extra += f"<h2>{title}</h2><table>" + "".join(
+            "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) + "</table>"
     legend = ('<p class="legend"><span class="k center"></span> خط المنتصف '
               '<span class="k valley"></span> خط طيّ <span class="k approx"></span> خط تقديري '
               '<span class="k cut"></span> قصّ <span class="dot"></span> علامة</p>')
@@ -253,9 +260,9 @@ def page_steps(p, figs, idx, total_note):
 <header><span class="tag">{tag}</span><h1>{idx}. {p["ar"]} <small>{p["name"]}</small></h1></header>
 <p class="facts"><b>الورقة:</b> {p["paper"]}<br><b>الهدف:</b> {p["goal"]}</p>
 <div class="figs">{"".join(figs)}{planform(p["id"])}</div>{legend}
-<div class="cols"><div><h2>الخطوات <small>{total_note}</small></h2>{lead}<ol class="steps">{steps}</ol></div>
+<div class="cols"><div class="main"><h2>الخطوات <small>{total_note}</small></h2>{lead}<ol class="steps">{steps}</ol></div>
 <div class="side"><h2>المزايا</h2><ul>{feats}</ul>
-<h2>الطباعة</h2><ul><li>اطبع صفحة القالب التالية بحجم 100% (بلا "ملاءمة للصفحة").</li>
+{extra}<h2>الطباعة</h2><ul><li>اطبع صفحة القالب التالية بحجم 100% (بلا "ملاءمة للصفحة").</li>
 <li>قِس خط الاختبار: 100 mm.</li><li>اطوِ والخطوط إلى الداخل أو الخارج: لا فرق.</li></ul></div></div>
 </section>'''
 
@@ -283,7 +290,7 @@ def page_overview(planes):
              + '</svg>')
     return f'''<section class="page">
 <header><h1>طائرات ورقية للترفيه <small>مخططات للطباعة على A4</small></h1></header>
-<p class="facts">3 طائرات من الفيديوهات + طائرة مدمجة + طائرة جديدة. كل طائرة = صفحة خطوات + صفحة قالب 1:1.</p>
+<p class="facts">3 طائرات من الفيديوهات + طائرة مدمجة + طائرة جديدة + طائرة مرشّحة للرقم القياسي. كل طائرة = صفحة خطوات + صفحة قالب 1:1.</p>
 <h2>1. آلية العائلة: كل الطائرات تتبع هذا المسار</h2><div class="flow">{flow_html}</div>
 <h2>2. الطائرات</h2>
 <table><tr><th>الطائرة</th><th>الورقة</th><th>الهدف</th><th>أهم المزايا</th></tr>{rows}</table>
@@ -291,7 +298,7 @@ def page_overview(planes):
 <h2>4. ما يعنيه هذا لك</h2><ul>
 <li>ابدأ بـ <span class="ltr">Haotian-1</span>: A4، بلا مقص، أسهل قفل.</li>
 <li>الأرقام بالسنتيمتر من ترجمة الفيديو. كلمة "تقديري" = قياس من الصورة.</li>
-<li>ثلاثي-1 ونسمة-1 نموذجان أوليان. اختبرهما بصفحة الاختبار الأخيرة.</li></ul>
+<li>ثلاثي-1 ونسمة-1 وقمّة-1 نماذج أولية. اختبرها بصفحة الاختبار الأخيرة.</li></ul>
 <p class="src">المصدر: 3 فيديوهات تعليمية لقناة 纸飞君 (bilibili). التصاميم الأصلية ملك لأصحابها.</p>
 </section>'''
 
@@ -329,7 +336,7 @@ h2 small { font-size: 7.5pt; color: #666; font-weight: normal }
 .facts { margin: 1mm 0 2mm; line-height: 1.6 } .ltr { direction: ltr; unicode-bidi: embed }
 .figs { display: flex; gap: 3mm; align-items: flex-end; justify-content: space-between; margin: 2mm 0 }
 figure { margin: 0; text-align: center; flex: 1 } figcaption { font-size: 7.3pt; color: #333; margin-top: 1mm; line-height: 1.35 }
-.cols { display: flex; gap: 6mm } .cols > div:first-child { flex: 1.7 } .side { flex: 1 }
+.cols { display: flex; gap: 6mm } .cols > .main { flex: 1.5 } .side table { font-size: 7.6pt } .side { flex: 1 }
 ol.steps { margin: 0; padding-right: 7mm; line-height: 1.6; font-size: 11pt } ol.steps li { margin-bottom: 0.8mm }
 p.lead { font-weight: bold; margin: 1mm 0 }
 b.t { font-size: 7.5pt; color: #fff; background: #444; border-radius: 1mm; padding: 0 1mm; direction: ltr; unicode-bidi: embed }
@@ -364,7 +371,7 @@ def build(cfg):
     pages = [page_overview(planes)]
     for i, p in enumerate(planes, 1):
         tl, marks, notes, figs, _ = GEO[p["geometry"]](p)
-        note = "(الأرقام = وقت الفيديو ±3 ث)" if p["family"] == "video" else "(الخطوات 1–3 = الخطوط ①②③ في القالب)"
+        note = "(الأرقام = وقت الفيديو ±3 ث)" if p["family"] == "video" else "(الخطوات الأولى = الخطوط المرقّمة في القالب)"
         pages.append(page_steps(p, figs, i, note))
         pages.append(page_template(p, tl, marks, notes))
     pages.append(page_test(planes))

@@ -15,3 +15,4 @@ Pending:
 - 5-10 repeated runs: not run.
 - Fold test on real paper: not possible here. The user must fold each plane once and report where a step fails.
 - Trio-1 and Nasma-1: prototypes, not flight-tested.
+- Qimma-1 (record candidate): prototype, not flight-tested. Budget numbers on its page are examples, not measurements.
