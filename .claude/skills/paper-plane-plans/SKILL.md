@@ -34,6 +34,8 @@ Fix and rebuild. After 3 failed tries stop and report what fails.
 - `python3 scripts/build_plans.py --out plans.html` - builds the HTML from `references/planes.json`.
 - `node scripts/render_pdf.js plans.html plans.pdf --png preview --expect <pages>` - renders the PDF, checks page count and size, writes previews.
 
+- `python3 scripts/make_3d_video.py --out plane-3d.mp4 --plane qimma --preview frames` - 3D how-to MP4 for a `unite`-geometry plane. Read the preview frames before sending. Steps 6-10 are a text card, not a simulation.
+
 ## Output
 `paper-planes/paper-plane-plans.pdf` and `.html`. Tell the user: print at 100 %, measure the 100 mm ruler.
 
@@ -42,4 +44,5 @@ When a step fails, fix it, finish the task, then add one line here: problem -> f
 - A relative `rm` after `cd` is blocked by the safety check -> write new frames to a new folder instead.
 - SVG `text-anchor` start/end flips in RTL text -> use `middle` only and move the x position.
 - A list item with `list-style: none` still takes a number -> put lead text in a `<p>` before the `<ol>`.
+- The sign ≤ is mirrored in RTL text and reads wrong next to digits -> write "لا يتجاوز" instead.
 - A5 templates fill the whole A4 page -> draw the test ruler inside the template tail area, not on the page.
