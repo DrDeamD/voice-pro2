@@ -35,6 +35,7 @@ Fix and rebuild. After 3 failed tries stop and report what fails.
 - `node scripts/render_pdf.js plans.html plans.pdf --png preview --expect <pages>` - renders the PDF, checks page count and size, writes previews.
 
 - `python3 scripts/make_3d_video.py --out plane-3d.mp4 --plane qimma --preview frames` - 3D how-to MP4 for a `unite`-geometry plane. Read the preview frames before sending. Steps 6-10 are a text card, not a simulation.
+- Remotion 3D video for steps 5-11: project in `paper-planes/qimma-remotion/` (see its README). Render with `npx remotion render Qimma1Steps5to11 out/qimma-1-steps-5-11.mp4 --gl=swangle`. Check frames with `--frames=<list> --sequence --image-format=png` before the full render.
 
 ## Output
 `paper-planes/paper-plane-plans.pdf` and `.html`. Tell the user: print at 100 %, measure the 100 mm ruler.
@@ -45,4 +46,6 @@ When a step fails, fix it, finish the task, then add one line here: problem -> f
 - SVG `text-anchor` start/end flips in RTL text -> use `middle` only and move the x position.
 - A list item with `list-style: none` still takes a number -> put lead text in a `<p>` before the `<ol>`.
 - The sign ≤ is mirrored in RTL text and reads wrong next to digits -> write "لا يتجاوز" instead.
+- Fold animation: a layer with z != 0 ended at the wrong height -> lift = progress * (target + layer z), because the rotation maps z to -z.
+- Remotion browser download blocked (remotion.media 403) and no GPU -> `--browser-executable` = pre-installed chrome-headless-shell, `--gl=swangle`.
 - A5 templates fill the whole A4 page -> draw the test ruler inside the template tail area, not on the page.
